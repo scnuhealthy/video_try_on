@@ -1,0 +1,129 @@
+load("@fbcode_macros//build_defs:python_binary.bzl", "python_binary")
+load("@fbcode_macros//build_defs:python_library.bzl", "python_library")
+load("//tools/xar:defs.bzl", "xar_python_binary")
+
+python_library(
+    name = "lib",
+    srcs = glob(
+        [
+            "*.py",
+            "**/*.py",
+            "**/**/*.py",
+        ],
+        exclude = [
+            "main_finetune.py",
+            "main_linprobe.py",
+            "main_pretrain.py",
+        ],
+    ),
+    base_module = "mae",
+    deps = [
+        "fbsource//third-party/pypi/timm:timm",
+        "//caffe2:torch",
+        "//caffe2:torch_tensorboard",
+        "//caffe2/torch/fb/rendezvous:zeus",
+        "//fair_infra/data/iopath/iopath:iopath",
+        "//fair_infra/data/prefetcher:prefetcher",
+        "//fblearner/flow/facebook:flow_fb_lib",
+        "//github/facebookresearch/fairscale:fairscale",
+        "//python/wheel/av:av",
+        "//python/wheel/moviepy:moviepy",
+        "//ti/urlgen:everstore_url_py",
+        "//vision/fair/detectron2/detectron2:detectron2",
+        "//vision/fair/fvcore/fvcore:fvcore",
+        "//vision/fair/pytorchvideo/pytorchvideo:pytorchvideo",
+    ],
+    external_deps = [
+        "PyYAML",
+        "matplotlib",
+        "numpy",
+        "opencv3",
+        "simplejson",
+        ("pycurl", None),
+        "scikit-learn",
+    ],
+)
+
+python_library(
+    name = "main_finetune",
+    srcs = ["main_finetune.py"],
+    base_module = "",
+    py_version = ">=3.6",
+    deps = ["//vision/fair/mae:lib"],
+)
+
+python_binary(
+    name = "run_finetune_bin",
+    srcs = ["run_finetune.py"],
+    base_module = "",
+    compile = "with-source",
+    main_module = "run_finetune",
+    par_style = "xar",
+    py_version = ">=3.6",
+    deps = [
+        "//vision/fair/mae:lib",
+        "//vision/fair/mae:main_finetune",
+    ],
+)
+
+xar_python_binary(
+    name = "run_finetune_xar",
+    output_name = "run_finetune.xar",
+    src_rule_name = ":run_finetune_bin",
+)
+
+python_library(
+    name = "main_pretrain",
+    srcs = ["main_pretrain.py"],
+    base_module = "",
+    py_version = ">=3.6",
+    deps = ["//vision/fair/mae:lib"],
+)
+
+python_binary(
+    name = "run_pretrain_bin",
+    srcs = ["run_pretrain.py"],
+    base_module = "",
+    compile = "with-source",
+    main_module = "run_pretrain",
+    par_style = "xar",
+    py_version = ">=3.6",
+    deps = [
+        "//vision/fair/mae:lib",
+        "//vision/fair/mae:main_pretrain",
+    ],
+)
+
+xar_python_binary(
+    name = "run_pretrain_xar",
+    output_name = "run_pretrain.xar",
+    src_rule_name = ":run_pretrain_bin",
+)
+
+python_library(
+    name = "main_test",
+    srcs = ["main_test.py"],
+    base_module = "",
+    py_version = ">=3.6",
+    deps = ["//vision/fair/mae:lib"],
+)
+
+python_binary(
+    name = "run_test_bin",
+    srcs = ["run_test.py"],
+    base_module = "",
+    compile = "with-source",
+    main_module = "run_test",
+    par_style = "xar",
+    py_version = ">=3.6",
+    deps = [
+        "//vision/fair/mae:lib",
+        "//vision/fair/mae:main_test",
+    ],
+)
+
+xar_python_binary(
+    name = "run_test_xar",
+    output_name = "run_test.xar",
+    src_rule_name = ":run_test_bin",
+)
