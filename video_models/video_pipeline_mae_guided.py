@@ -160,7 +160,7 @@ class VideoPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraLoaderMi
         )
         frames = frames.to(latents.dtype)
         print('22', frames.shape)
-        loss, _, _, vis = self.mae_model(frames.unsqueeze(0), 1, mask_ratio=0.5, visualize=True)
+        loss, _, _, vis = self.mae_model(frames.unsqueeze(0), 1, mask_ratio=0.7, visualize=True)
         vis = vis.detach().cpu()
         plot_input(vis[0].permute(0, 2, 1, 3, 4), save_name='a.jpg')
         print('loss', loss, loss.dtype)
@@ -271,7 +271,7 @@ class VideoPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraLoaderMi
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
 
         # guided
-        clip_guidance_scale = 1000
+        clip_guidance_scale = 5000
 
         # 9. Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
@@ -286,17 +286,19 @@ class VideoPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraLoaderMi
                 # predict the noise residual
                 noise_pred = self.unet(scaled_latent_model_input, condition_latent_input, t, encoder_hidden_states=prompt_embeds).sample
                 # guided diffusion
-                noise_pred, latents = self.cond_fn(
-                        latents,
-                        t,
-                        i,
-                        noise_pred,
-                        clip_guidance_scale,
-                        cloth_agnostic, 
-                        mask,
-                        condition_latent_input,
-                        encoder_hidden_states=prompt_embeds,
-                )
+                if t < 800:
+                    for p in range(2):
+                        noise_pred, latents = self.cond_fn(
+                                latents,
+                                t,
+                                i,
+                                noise_pred,
+                                clip_guidance_scale,
+                                cloth_agnostic, 
+                                mask,
+                                condition_latent_input,
+                                encoder_hidden_states=prompt_embeds,
+                        )
 
                 # Hack:
                 # For karras style schedulers the model does classifer free guidance using the
@@ -327,9 +329,9 @@ class VideoPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraLoaderMi
         # 10. Post-processing
         # crop
         latent_size = latents.shape[3:]
-        latents = latents[:,:,:,latent_size[0]//4:latent_size[0]*3//4, latent_size[1]//4:latent_size[1]*3//4]
-        image = self.decode_latents(latents)
-        # image = self.decode_latents_emasc(latents, cloth_agnostic, mask)
+        # latents = latents[:,:,:,latent_size[0]//4:latent_size[0]*3//4, latent_size[1]//4:latent_size[1]*3//4]
+        # image = self.decode_latents(latents)
+        image = self.decode_latents_emasc(latents, cloth_agnostic, mask)
         # # 11. Run safety checker
         # image, has_nsfw_concept = self.run_safety_checker(image, device, prompt_embeds.dtype)
 

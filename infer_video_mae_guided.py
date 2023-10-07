@@ -98,7 +98,7 @@ out_dir = config.out_dir
 if not os.path.exists(out_dir):
     os.makedirs(out_dir)
 
-num_inference_steps = 20
+num_inference_steps = 40
 image_guidance_scale = 1
 masked_image_guidance_scale = 1
 weight_dtype = torch.float16
