@@ -51,9 +51,9 @@ def collate_fn(examples):
     pose = torch.stack([example["pose"] for example in examples])
     # densepose = torch.stack([example["densepose"] for example in examples])
     im_name = [example['im_name'] for example in examples]
+    c_name = [example['c_name'][opt.datasetting] for example in examples]
     dino_fea = torch.stack([example["dino_fea"] for example in examples])
     high_frequency_map = torch.stack([example["high_frequency_map"][opt.datasetting] for example in examples])
-    hog_map = torch.stack([example["hog_map"][opt.datasetting] for example in examples])
     parse_other = torch.stack([example["parse_other"] for example in examples])
     parse_upper_mask = torch.stack([example["parse_upper_mask"] for example in examples])
     return {
@@ -67,9 +67,9 @@ def collate_fn(examples):
         "cloth":cloth,
         # 'cloth_mask':cloth_mask,
         'im_name':im_name,
+        "c_name":c_name,
         "dino_fea":dino_fea,
         "high_frequency_map":high_frequency_map,
-        "hog_map":hog_map,
         "parse_other":parse_other,
         "parse_upper_mask":parse_upper_mask
     }
@@ -85,8 +85,16 @@ elif opt.test_dataset == 'Wild':
     from WildVideoDataSet import WildVideoDataSet,CPDataLoader
     dataset = WildVideoDataSet(Config.fromfile('wild_config.py'))
     opt.datasetting = 'paired'
+elif opt.test_dataset == 'VTT':
+    from VTTDataSet import VTTDataSet, CPDataLoader
+    dataset = VTTDataSet(opt)
+    opt.datasetting = 'paired'
+elif opt.test_dataset == 'TikTok':
+    from TikTokDataSet import TikTokDataSet, CPDataLoader
+    dataset = TikTokDataSet(opt)
+    opt.datasetting = 'paired'
 
-batch_size = 10
+batch_size = 16
 test_dataloader = CPDataLoader(batch_size=batch_size,workers=4,shuffle=False,dataset=dataset,collate_fn=collate_fn)
 
 pipe = BlendedClothPipeline.from_pretrained(config.model_path, safety_checker=None, requires_safety_checker=False,torch_dtype=torch.float16).to("cuda")
@@ -122,20 +130,18 @@ masked_image_guidance_scale = 1
 weight_dtype = torch.float16
 
 image_idx = 0
-for i in range(0,10):
+for i in range(0,4):
 # for i, batch in enumerate(test_dataloader.data_loader):
     batch = test_dataloader.next_batch()
     # image = batch['image'].cuda()
-    im_name = batch['im_name'][0].split('/')[-1]
-
+    im_name = batch['im_name']
+    c_name = batch['c_name']
     c_paired = batch['cloth'].to(device='cuda')
 
     # condition
     agnostic = batch['agnostic'].to(device='cuda',dtype=weight_dtype)
     pose = batch['pose'].to(device='cuda', dtype=weight_dtype)
     high_frequency_map = batch['high_frequency_map'].to(device='cuda',dtype=weight_dtype)
-    # high_frequency_map = torch.zeros_like(high_frequency_map).to(device='cuda',dtype=weight_dtype)
-    hog_map = batch['hog_map'].to(device='cuda',dtype=weight_dtype)
 
     # dino_fea
     dino_fea = batch['dino_fea'].to(device='cuda',dtype=weight_dtype)
@@ -160,36 +166,23 @@ for i in range(0,10):
         # mask = pcm,
         gt = target_image.to(device='cuda', dtype=weight_dtype),
         high_frequency_map = high_frequency_map,
-        hog_map = hog_map,
         dino_fea = dino_fea,
     ).images
 
+    
     for idx, edited_image in enumerate(edited_images):
+        name1 = im_name[idx].split('/')[1] + '+' + im_name[idx].split('/')[-1][:-4] + '+' + c_name[idx].split('/')[-1]
+        # name1 = im_name[idx].split('/')[-1]
+        name2 = im_name[idx].split('/')[1] + '+' + im_name[idx].split('/')[-1][:-4] + '+' + c_name[idx].split('/')[-1][:-4] + '_cond.jpg'
+        
+        edited_image.save(os.path.join(out_dir, name1))
+
         edited_image = torch.tensor(np.array(edited_image)).permute(2,0,1) / 255.0
         grid = make_image_grid([(c_paired[idx].cpu() / 2 + 0.5),(high_frequency_map[idx].cpu().detach() / 2 + 0.5), (parse_other[idx].cpu().detach() / 2 + 0.5),
-        (pose[idx].cpu().detach() / 2 + 0.5),(agnostic[idx].cpu().detach() / 2 + 0.5),
+        (pose[idx].cpu().detach() / 2 + 0.5),(agnostic[idx].cpu().detach() / 2 + 0.5), 
         (target_image[idx].cpu() /2 +0.5), edited_image.cpu(),
         ], nrow=4)
-        save_image(grid, os.path.join(out_dir, ('%d.jpg'%image_idx).zfill(6)))
+        # save_image(grid, os.path.join(out_dir, ('%d.jpg'%image_idx).zfill(6)))
+        save_image(grid, os.path.join(out_dir, name2))
         image_idx +=1
-
-    # for idx, edited_image in enumerate(edited_images):
-    #     edited_image = torch.tensor(np.array(edited_image)).permute(2,0,1) / 255.0
-    #     grid = make_image_grid([(c_paired[idx].cpu() ),(high_frequency_map[idx].cpu().detach() ), (parse_other[idx].cpu().detach() ),
-    #     (pose[idx].cpu().detach() ),(agnostic[idx].cpu().detach() ),
-    #     (target_image[idx].cpu() ), edited_image.cpu(),
-    #     ], nrow=4)
-    #     save_image(grid, os.path.join(out_dir, ('%d.jpg'%image_idx).zfill(6)))
-    #     image_idx +=1
-
-    # edited_image.save(os.path.join(out_dir,  im_name))
-    # warped_cloth_paired = warped_cloth_paired[0].cpu().detach() / 2 + 0.5
-    # warped_cloth_paired = warped_cloth_paired.permute(1,2,0).numpy()*255
-    # warped_cloth_paired = warped_cloth_paired.astype(np.uint8)
-    # warped_cloth_paired = Image.fromarray(warped_cloth_paired)
-    # warped_cloth_paired.save(os.path.join(out_dir, 'warp_clothes', im_name))
-    # target_image = target_image[0].cpu() / 2 +0.5
-    # target_image = target_image.permute(1,2,0).numpy()*255
-    # target_image = target_image.astype(np.uint8)
-    # target_image = Image.fromarray(target_image)
-    # target_image.save(os.path.join(out_dir, 'target', im_name))
+        print(im_name[idx],c_name[idx], name2)

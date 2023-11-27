@@ -11,6 +11,7 @@ import copy
 from mmengine import Config
 import random
 from utils import get_high_frequency_map, get_cond_color
+import torch.nn.functional as F
 
 def tokenize_captions(tokenizer, captions):
     inputs = tokenizer(
@@ -22,7 +23,7 @@ class WildVideoDataSet(data.Dataset):
     """
         Test Dataset for CP-VTON.
     """
-    def __init__(self, opt, tokenizer=None):
+    def __init__(self, opt, tokenizer=None, begin_name=None, clothes_name='00737_00.jpg'):
         super(WildVideoDataSet, self).__init__()
         # base setting
         self.opt = opt
@@ -38,10 +39,19 @@ class WildVideoDataSet(data.Dataset):
 
         im_names = os.listdir(osp.join(self.root, 'image'))
         im_names = sorted(im_names)
+        if begin_name is not None:
+            begin_idx = 0
+            for i in range(len(im_names)):
+                im_name = im_names[i]
+                if begin_name == im_name:
+                    begin_idx = i
+                    break
+            im_names = im_names[begin_idx:]
         print(im_names)
         self.im_names = im_names
         self.tokenizer = tokenizer
         self.is_atr = opt.is_atr
+        self.clothes_name = clothes_name
 
     def name(self):
         return "WildVideoDataSet"
@@ -81,7 +91,9 @@ class WildVideoDataSet(data.Dataset):
         pose_data[9] = point + (pose_data[9] - point) / length_b * length_a
         pose_data[12] = point + (pose_data[12] - point) / length_b * length_a
 
-        r = int(length_a / 16) + 1
+        
+        r = int(length_a / 16) + 1 + 4
+        # print(r)
 
         # mask torso
         for i in [9, 12]:
@@ -139,7 +151,8 @@ class WildVideoDataSet(data.Dataset):
         self.data_path = '/root/autodl-tmp/zalando-hd-resized/test/'
         # self.data_path = '/data1/hzj/DressCode/upper_body/images'
         c_name = {}
-        c_name['paired'] = '07148_00.jpg'
+        c_name['paired'] = self.clothes_name
+        # c_name['paired'] = '07148_00.jpg'
         high_frequency_map = {}
         color_map = {}
         c = {}
@@ -227,6 +240,22 @@ class WildVideoDataSet(data.Dataset):
         phead = new_parse_map[1] + new_parse_map[2]
         im_h = im * phead - (1 - phead) # [-1,1], fill 0 for other parts
 
+        # background mask
+        background_mask = new_parse_map[0:1]
+        im = im * (1 - background_mask) + background_mask
+
+        parse_big = torch.from_numpy(np.array(im_parse_pil_big)[None]).long()
+        parse_map_big = torch.FloatTensor(20, im_pil_big.size[1], im_pil_big.size[0]).zero_()
+        parse_map_big = parse_map_big.scatter_(0, parse_big, 1.0)
+        # print(parse_map_big.shape)
+        background_mask_big = parse_map_big[0]
+
+        im_pil_big_tmp = torch.tensor(np.array(im_pil_big)).permute(2,0,1)
+        # print(im_pil_big_tmp.shape, background_mask_big.shape)
+        im_pil_big_tmp = im_pil_big_tmp * (1 - background_mask_big) + background_mask_big*255
+        im_pil_big_tmp = im_pil_big_tmp.permute(1,2,0).numpy().astype(np.uint8)
+        im_pil_big = Image.fromarray(im_pil_big_tmp)
+
         if self.opt.with_one_hot:
             parse_onehot = torch.FloatTensor(1, self.fine_height, self.fine_width).zero_()
             for i in range(len(labels)):
@@ -312,7 +341,7 @@ class WildVideoDataSet(data.Dataset):
             'cloth':    c,
             'high_frequency_map':high_frequency_map,
             'dino_fea':dino_fea,
-            'color_map':color_map
+            'background_mask':background_mask
             }
         
         return result
@@ -326,10 +355,10 @@ class WildVideoDataSet(data.Dataset):
         else:
             pre_index = index
         result = self.single_get(index)
-        pr = self.single_get(index-1)
-        result['previous_pose'] = pr['pose']
-        result['previous_image'] = pr['image']
-        result['previous_parse_cloth'] = pr['parse_cloth']
+        # pr = self.single_get(index-1)
+        # result['previous_pose'] = pr['pose']
+        # result['previous_image'] = pr['image']
+        # result['previous_parse_cloth'] = pr['parse_cloth']
         return result
 
 class CPDataLoader(object):
@@ -392,9 +421,9 @@ if __name__ == '__main__':
 
         return input
 
-    dataset = WildVideoDataSet(opt)
+    dataset = WildVideoDataSet(opt, begin_name=None,clothes_name='06887_00.jpg')
 
-    p = dataset[5]
+    p = dataset[38]
 
     agnostic = p['agnostic'].permute(1,2,0).numpy()
     agnostic *=255
@@ -454,23 +483,23 @@ if __name__ == '__main__':
     parse_cloth= Image.fromarray(parse_cloth)
     parse_cloth.save('parse_cloth.jpg')
 
-    image = p['previous_image'].permute(1,2,0).numpy()
-    image *=255
-    image = image.astype(np.uint8)
-    image= Image.fromarray(image)
-    image.save('previous_image.jpg')
+    # image = p['previous_image'].permute(1,2,0).numpy()
+    # image *=255
+    # image = image.astype(np.uint8)
+    # image= Image.fromarray(image)
+    # image.save('previous_image.jpg')
 
-    pose = p['previous_pose'].permute(1,2,0).numpy()
-    pose *=255
-    pose = pose.astype(np.uint8)
-    pose= Image.fromarray(pose)
-    pose.save('previous_pose.jpg')
+    # pose = p['previous_pose'].permute(1,2,0).numpy()
+    # pose *=255
+    # pose = pose.astype(np.uint8)
+    # pose= Image.fromarray(pose)
+    # pose.save('previous_pose.jpg')
 
-    parse_cloth = p['previous_parse_cloth'].permute(1,2,0).numpy()
-    parse_cloth *=255
-    parse_cloth = parse_cloth.astype(np.uint8)
-    parse_cloth= Image.fromarray(parse_cloth)
-    parse_cloth.save('previous_parse_cloth.jpg')
+    # parse_cloth = p['previous_parse_cloth'].permute(1,2,0).numpy()
+    # parse_cloth *=255
+    # parse_cloth = parse_cloth.astype(np.uint8)
+    # parse_cloth= Image.fromarray(parse_cloth)
+    # parse_cloth.save('previous_parse_cloth.jpg')
 
     cloth = p['cloth']['paired'].permute(1,2,0).numpy()
     cloth *=255

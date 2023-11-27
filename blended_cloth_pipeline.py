@@ -158,7 +158,6 @@ class BlendedClothPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraL
         gt: Optional[torch.FloatTensor] = None,
         mask: Optional[torch.FloatTensor] = None,
         high_frequency_map: Optional[torch.FloatTensor] = None,
-        hog_map: Optional[torch.FloatTensor] = None,
         dino_fea: Optional[torch.FloatTensor] = None,
     ):
 
@@ -182,8 +181,6 @@ class BlendedClothPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraL
         # 3. Preprocess image
         pose_embeds = F.interpolate(pose, scale_factor=(0.125,0.125))
         pose_embeds = pose_embeds.to(device=device, dtype=prompt_embeds.dtype)
-        hog_map_latents = F.interpolate(hog_map, scale_factor=(0.125,0.125))
-        hog_map_latents = hog_map_latents.to(device=device, dtype=prompt_embeds.dtype)
         height, width = masked_image.shape[-2:]
 
         # 4. set timesteps
@@ -236,7 +233,7 @@ class BlendedClothPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraL
 
                 # concat latents, image_latents in the channel dimension
                 scaled_latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
-                condition_latent_input = torch.cat([high_frequency_map_latents, masked_image_latents, pose_embeds_input, hog_map_latents],dim=1)
+                condition_latent_input = torch.cat([high_frequency_map_latents, masked_image_latents, pose_embeds_input],dim=1)
 
                 # predict the noise residual
                 noise_pred = self.unet(scaled_latent_model_input, condition_latent_input, t, encoder_hidden_states=prompt_embeds).sample
