@@ -129,7 +129,7 @@ class UNet_EMASC(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin):
             in_channels, block_out_channels[0], kernel_size=conv_in_kernel, padding=conv_in_padding
         )
         self.conv_in_cloth = nn.Conv2d(
-            11 + 1, block_out_channels[0], kernel_size=conv_in_kernel, padding=conv_in_padding
+            11 , block_out_channels[0], kernel_size=conv_in_kernel, padding=conv_in_padding
         )
 
         # time
@@ -620,8 +620,8 @@ class UNet_EMASC(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin):
 
             sample_cloth, res_samples_cloth = downsample_block_cloth(hidden_states=sample_cloth, temb=emb)
 
-            # sample = torch.cat([sample, sample_cloth],dim=1)
-            # sample = downsample_fuse(sample)
+            sample = torch.cat([sample, sample_cloth],dim=1)
+            sample = downsample_fuse(sample)
             down_block_res_samples += res_samples
             down_block_res_samples_cloth += res_samples_cloth
 
@@ -669,10 +669,11 @@ class UNet_EMASC(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin):
 
             res_samples_cloth = down_block_res_samples_cloth[-len(upsample_block.resnets) :]
             down_block_res_samples_cloth = down_block_res_samples_cloth[: -len(upsample_block.resnets)]
-
             if i == 0:
+                # print('1111',i, -len(upsample_block.resnets))
                 up_fuse_blocks = self.up_fuse_blocks[-len(upsample_block.resnets):]
             else:
+                # print('2222',i, -len(upsample_block.resnets)*(i+1), -len(upsample_block.resnets)*i)
                 up_fuse_blocks = self.up_fuse_blocks[-len(upsample_block.resnets)*(i+1): -len(upsample_block.resnets)*i]
 
             # if we have not reached the final block and need to forward the
@@ -692,7 +693,7 @@ class UNet_EMASC(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin):
                 sample = upsample_block(
                     hidden_states=sample,
                     temb=emb,
-                    res_hidden_states_tuple=res_samples,
+                    res_hidden_states_tuple=fused_res_samples,
                     encoder_hidden_states=encoder_hidden_states,
                     cross_attention_kwargs=cross_attention_kwargs,
                     upsample_size=upsample_size,

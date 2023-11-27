@@ -27,16 +27,36 @@ sys.path.append('./mae')
 from mae.models_mae import mae_vit_large_patch16
 
 # seed 
-seed = 4
+seed = 5
 random.seed(seed)
 torch.manual_seed(seed)
 torch.cuda.manual_seed(seed)
 
-config = Config.fromfile('wild_config.py')
-opt = copy.deepcopy(config)
 # dataset
-dataset = WildVideoDataSet(Config.fromfile('wild_config.py'))
+config = Config.fromfile('config.py')
+opt = copy.deepcopy(config)
+mode = 'test'
+if mode == 'test':
+    opt.datamode = config.infer_datamode
+    opt.data_list = config.infer_data_list
+    opt.datasetting = 'paired'   
+else:
+    opt.datamode = config.train_datamode
+    opt.data_list = config.train_data_list
+    opt.datasetting = config.train_datasetting
+# dataset = VTTDataSet(opt,level='image')
+# dataset = CUHKDataSet(opt,level='image')
+from TikTokDataSet import TikTokDataSet, CPDataLoader
+dataset = TikTokDataSet(opt)
 opt.datasetting = 'paired'
+print('dataset len:',len(dataset))
+
+
+# config = Config.fromfile('wild_config.py')
+# opt = copy.deepcopy(config)
+# # dataset
+# dataset = WildVideoDataSet(Config.fromfile('wild_config.py'),begin_name='0232.jpg',clothes_name='05667_00.jpg')
+# opt.datasetting = 'paired'
 
 def collate_fn(examples):
     pcm = torch.stack([example["pcm"] for example in examples])
@@ -144,9 +164,8 @@ for i in range(1):
     ).images
 
     outputs = []
-    print(c_name)
     for idx, edited_image in enumerate(edited_images):
-        if False:
+        if True:
             edited_image = torch.tensor(np.array(edited_image)).permute(2,0,1) / 255.0
             grid = make_image_grid([(c_paired[idx].cpu() / 2 + 0.5),(high_frequency_map[idx].cpu().detach() / 2 + 0.5), (parse_other[idx].cpu().detach() / 2 + 0.5),
             (pose[idx].cpu().detach() / 2 + 0.5),(agnostic[idx].cpu().detach() / 2 + 0.5),
@@ -162,4 +181,4 @@ for i in range(1):
             edited_image = np.array(edited_image).astype(np.uint8)
             outputs.append(edited_image)
             image_idx +=1
-    imageio.mimsave(os.path.join(out_dir, c_name[:-4]+'.gif'), outputs, 'GIF', duration=500)
+    imageio.mimsave(os.path.join(out_dir, c_name[:-4]+'.gif'), outputs, 'GIF', duration=100)

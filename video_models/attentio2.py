@@ -5,7 +5,7 @@ from typing import Optional, Callable
 import math
 import torch
 import torch.nn.functional as F
-from torch import nn
+from torch import nn, einsum
 # from positional_encodings.torch_encodings import PositionalEncoding2D
 
 from diffusers.configuration_utils import ConfigMixin, register_to_config
@@ -203,6 +203,18 @@ class BasicTransformerBlock(nn.Module):
         self.ff = FeedForward(dim, dropout=dropout, activation_fn=activation_fn)
         self.norm3 = nn.LayerNorm(dim)
 
+        # Temp-Attn
+        self.attn_temp = CrossAttentionPosition(
+            query_dim=dim,
+            heads=num_attention_heads,
+            dim_head=attention_head_dim,
+            dropout=dropout,
+            bias=attention_bias,
+            upcast_attention=upcast_attention,
+        )
+        nn.init.zeros_(self.attn_temp.to_out[0].weight.data)
+        self.norm_temp = AdaLayerNorm(dim, num_embeds_ada_norm) if self.use_ada_layer_norm else nn.LayerNorm(dim)
+
     def set_use_memory_efficient_attention_xformers(self, use_memory_efficient_attention_xformers: bool, attention_op: Optional[Callable] = None):
         if not is_xformers_available():
             print("Here is how to install it")
@@ -264,6 +276,20 @@ class BasicTransformerBlock(nn.Module):
 
         # Feed-forward
         hidden_states = self.ff(self.norm3(hidden_states)) + hidden_states
+
+        # Temporal-Attention
+        d = hidden_states.shape[1]
+        hidden_states = rearrange(hidden_states, "(b f) d c -> (b d) f c", f=video_length)
+        norm_hidden_states = (
+            self.norm_temp(hidden_states, timestep) if self.use_ada_layer_norm else self.norm_temp(hidden_states)
+        )
+
+        time_rel_pos_bias = None
+        if hasattr(self, 'temporal_rel_pos_bias'):
+            time_rel_pos_bias = self.temporal_rel_pos_bias(hidden_states.shape[1])
+
+        hidden_states = self.attn_temp(norm_hidden_states, video_length=video_length, rel_pos_bias=time_rel_pos_bias) + hidden_states
+        hidden_states = rearrange(hidden_states, "(b d) f c -> (b f) d c", d=d)
 
         return hidden_states
 
@@ -493,3 +519,26 @@ class FullyFrameAttention(nn.Module):
         hidden_states = rearrange(hidden_states, "b (f d) c -> (b f) d c", f=video_length)
         return hidden_states
 
+class CrossAttentionPosition(Attention):
+    def forward(self, x, encoder_hidden_states=None, attention_mask=None, video_length=None, rel_pos_bias=None):
+        #x = self.norm(x)
+
+        q, k, v = self.to_q(x), self.to_k(x), self.to_v(x)
+        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h = self.heads), (q, k, v))
+
+        q = q * self.scale
+
+        sim = einsum('b h i d, b h j d -> b h i j', q, k)
+
+        attn = sim.softmax(dim = -1)
+
+        out = einsum('b h i j, b h j d -> b h i d', attn, v)
+
+        out = rearrange(out, 'b h n d -> b n (h d)')
+
+        # linear proj
+        out = self.to_out[0](out)
+        # dropout
+        out = self.to_out[1](out)
+
+        return out

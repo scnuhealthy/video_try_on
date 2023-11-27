@@ -129,14 +129,19 @@ class VideoPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraLoaderMi
 
         # crop
         latent_size = sample.shape[3:]
-        sample = sample[:,:,:,latent_size[0]//4:latent_size[0]*3//4, latent_size[1]//4:latent_size[1]*3//4]
-            
+        # sample = sample[:,:,:,latent_size[0]//4:latent_size[0]*3//4, latent_size[1]//4:latent_size[1]*3//4]
+        sample = sample[:,:,:,latent_size[0]*1//6:latent_size[0]*5//6, latent_size[1]*1//6:latent_size[1]*5//6]
+        print(sample.shape)
         # Hardcode 0.18215 because stable-diffusion-2-base has not self.vae.config.scaling_factor
         # sample = 1 / 0.18215 * sample
         frames = self.decode_latents(sample, to_numpy=False)
+        print(frames.shape)
         # frames = self.decode_latents_emasc(sample, cloth_agnostic, mask, to_numpy=False)
         # image = self.vae.decode(sample).sample
-        # image = (image / 2 + 0.5).clamp(0, 1)
+        image = frames.detach()
+        image = image.cpu().permute(0, 2, 3, 1).float().numpy()
+        image = self.numpy_to_pil(image)
+        image[10].save('ppp.jpg')
 
         frames = frames.permute(0,2,3,1)
         MEAN = (0.45, 0.45, 0.45)
@@ -149,8 +154,8 @@ class VideoPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraLoaderMi
         frames = spatial_sampling(
             frames,
             spatial_idx=1,
-            min_scale=256,
-            max_scale=256,
+            min_scale=224,
+            max_scale=224,
             crop_size=224,
             random_horizontal_flip=False,
             inverse_uniform_sampling=False,
@@ -159,15 +164,15 @@ class VideoPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraLoaderMi
             motion_shift=False,
         )
         frames = frames.to(latents.dtype)
-        print('22', frames.shape)
+        # print('22', frames.shape)
         loss, _, _, vis = self.mae_model(frames.unsqueeze(0), 1, mask_ratio=0.7, visualize=True)
         vis = vis.detach().cpu()
         plot_input(vis[0].permute(0, 2, 1, 3, 4), save_name='a.jpg')
-        print('loss', loss, loss.dtype)
+        # print('loss', loss, loss.dtype)
         loss = loss * clip_guidance_scale
 
         grads = -torch.autograd.grad(loss, latents)[0]
-        print(torch.mean(grads),torch.min(grads),torch.max(grads))
+        # print(torch.mean(grads),torch.min(grads),torch.max(grads))
         if isinstance(self.scheduler, LMSDiscreteScheduler):
             latents = latents.detach() + grads * (sigma**2)
             noise_pred = noise_pred_original
@@ -286,8 +291,8 @@ class VideoPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraLoaderMi
                 # predict the noise residual
                 noise_pred = self.unet(scaled_latent_model_input, condition_latent_input, t, encoder_hidden_states=prompt_embeds).sample
                 # guided diffusion
-                if t < 800:
-                    for p in range(2):
+                if t < 900:
+                    for p in range(1):
                         noise_pred, latents = self.cond_fn(
                                 latents,
                                 t,

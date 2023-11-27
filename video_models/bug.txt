@@ -1,0 +1,1 @@
+3D 训练时 开了gradient checkpoint, 选取训练参数后，实际上有参数没有训练到

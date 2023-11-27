@@ -408,15 +408,24 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
             timesteps = timesteps[None].to(sample.device)
 
         # broadcast to batch dimension in a way that's compatible with ONNX/Core ML
+        timesteps_cloth = timesteps.clone()
         timesteps = timesteps.expand(sample.shape[0])
-
+        if len(timesteps_cloth) == 1:
+            timesteps_cloth = timesteps_cloth.expand(sample.shape[0]*sample.shape[2])
+        else:
+            timesteps_cloth = timesteps_cloth.unsqueeze(-1)
+            timesteps_cloth = timesteps_cloth.expand((sample.shape[0], sample.shape[2]))
+            timesteps_cloth = rearrange(timesteps_cloth, 'b f->(b f)')
         t_emb = self.time_proj(timesteps)
+        t_emb_cloth = self.time_proj(timesteps_cloth)
 
         # timesteps does not contain any weights and will always return f32 tensors
         # but time_embedding might actually be running in fp16. so we need to cast here.
         # there might be better ways to encapsulate this.
         t_emb = t_emb.to(dtype=self.dtype)
+        t_emb_cloth = t_emb_cloth.to(dtype=self.dtype)
         emb = self.time_embedding(t_emb)
+        emb_cloth = self.time_embedding(t_emb_cloth)
 
         if self.class_embedding is not None:
             if class_labels is None:
@@ -454,7 +463,7 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
             else:
                 sample, res_samples = downsample_block(hidden_states=sample, temb=emb)
 
-            sample_cloth, res_samples_cloth = downsample_block_cloth(hidden_states=sample_cloth, temb=emb)
+            sample_cloth, res_samples_cloth = downsample_block_cloth(hidden_states=sample_cloth, temb=emb_cloth)
 
             # sample = torch.cat([sample, sample_cloth],dim=1)
             # sample = downsample_fuse(sample)
@@ -481,7 +490,7 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
 
         sample_cloth = self.mid_block_cloth(
             sample_cloth,
-            emb,
+            emb_cloth,
             encoder_hidden_states=encoder_hidden_states,
             attention_mask=attention_mask,
             cross_attention_kwargs=cross_attention_kwargs,
@@ -529,7 +538,7 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
                 sample = upsample_block(
                     hidden_states=sample,
                     temb=emb,
-                    res_hidden_states_tuple=res_samples,
+                    res_hidden_states_tuple=fused_res_samples,
                     encoder_hidden_states=encoder_hidden_states,
                     upsample_size=upsample_size,
                     attention_mask=attention_mask,
@@ -581,8 +590,10 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
             raise RuntimeError(f"{model_file} does not exist")
         state_dict = torch.load(model_file, map_location="cpu")
         # for k, v in model.state_dict().items():
-        #     if '_temp.' in k:
+        #     if 'temp' in k:
+        #         print('init key:',k)
         #         state_dict.update({k: v})
         model.load_state_dict(state_dict, strict=True)
+        # model.load_state_dict(state_dict)
 
         return model

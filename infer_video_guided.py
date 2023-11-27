@@ -33,7 +33,7 @@ torch.cuda.manual_seed(seed)
 config = Config.fromfile('wild_config.py')
 opt = copy.deepcopy(config)
 # dataset
-dataset = WildVideoDataSet(Config.fromfile('wild_config.py'))
+dataset = WildVideoDataSet(Config.fromfile('wild_config.py'),begin_name='0001.jpg',clothes_name='01486_00.jpg')
 opt.datasetting = 'paired'
 
 def collate_fn(examples):
