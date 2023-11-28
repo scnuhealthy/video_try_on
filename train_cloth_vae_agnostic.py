@@ -1,3 +1,22 @@
+#!/usr/bin/env python
+# coding=utf-8
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Script to fine-tune Stable Diffusion for InstructPix2Pix."""
+
+import argparse
 import logging
 import math
 import os
@@ -19,32 +38,79 @@ from accelerate.utils import ProjectConfiguration, set_seed
 from huggingface_hub import create_repo, upload_folder
 from packaging import version
 from torchvision import transforms
+import torchvision
 from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
 
 import diffusers
 from diffusers import AutoencoderKL, DDPMScheduler, StableDiffusionInstructPix2PixPipeline, UNet2DConditionModel
-from unet_emasc import UNet_EMASC
 from diffusers.optimization import get_scheduler
 from diffusers.training_utils import EMAModel
 from diffusers.utils import check_min_version, deprecate, is_wandb_available
 from diffusers.utils.import_utils import is_xformers_available
+from autoencoder_kl_emasc import AutoencoderKL_EMASC
 
 import itertools
-from diffusers.models.vae import Encoder
-from CPDataset_HD import CPDataset
-from VTTDataSet import VTTDataSet
-from DressCodeDataSet import DressCodeDataSet
 from torchvision.utils import make_grid as make_image_grid
 from torchvision.utils import save_image
+from CPDataset_HD import CPDataset
+from DressCodeDataSet import DressCodeDataSet
 from mmengine import Config
-from utils import remove_overlap
+from VTTDataSet import VTTDataSet
 
 logger = get_logger(__name__, log_level="INFO")
 
+class Vgg19(nn.Module):
+    def __init__(self, requires_grad=False):
+        super(Vgg19, self).__init__()
+        vgg_pretrained_features = torchvision.models.vgg19(pretrained=True).features
+        self.slice1 = torch.nn.Sequential()
+        self.slice2 = torch.nn.Sequential()
+        self.slice3 = torch.nn.Sequential()
+        self.slice4 = torch.nn.Sequential()
+        self.slice5 = torch.nn.Sequential()
+        for x in range(2):
+            self.slice1.add_module(str(x), vgg_pretrained_features[x])
+        for x in range(2, 7):
+            self.slice2.add_module(str(x), vgg_pretrained_features[x])
+        for x in range(7, 12):
+            self.slice3.add_module(str(x), vgg_pretrained_features[x])
+        for x in range(12, 21):
+            self.slice4.add_module(str(x), vgg_pretrained_features[x])
+        for x in range(21, 30):
+            self.slice5.add_module(str(x), vgg_pretrained_features[x])
+        if not requires_grad:
+            for param in self.parameters():
+                param.requires_grad = False
+
+    def forward(self, X):
+        h_relu1 = self.slice1(X)
+        h_relu2 = self.slice2(h_relu1)
+        h_relu3 = self.slice3(h_relu2)
+        h_relu4 = self.slice4(h_relu3)
+        h_relu5 = self.slice5(h_relu4)
+        out = [h_relu1, h_relu2, h_relu3, h_relu4, h_relu5]
+        return out
+
+class VGGLoss(nn.Module):
+    def __init__(self, network, layids = None):
+        super(VGGLoss, self).__init__()
+        self.vgg = network
+        self.criterion = nn.L1Loss()
+        self.weights = [1.0/32, 1.0/16, 1.0/8, 1.0/4, 1.0]
+        self.layids = layids
+
+    def forward(self, x, y):
+        x_vgg, y_vgg = self.vgg(x), self.vgg(y)
+        loss = 0
+        if self.layids is None:
+            self.layids = list(range(len(x_vgg)))
+        for i in self.layids:
+            loss += self.weights[i] * self.criterion(x_vgg[i], y_vgg[i].detach())
+        return loss
 
 def parse_args():
-
+ 
     args = Config.fromfile('config.py')
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
     if env_local_rank != -1 and env_local_rank != args.local_rank:
@@ -58,14 +124,12 @@ def parse_args():
     args.datamode = args.train_datamode
     args.data_list = args.train_data_list
     args.datasetting = args.train_datasetting
-    
-    return args
 
+    return args
 
 def convert_to_np(image, resolution):
     image = image.convert("RGB").resize((resolution, resolution))
     return np.array(image).transpose(2, 0, 1)
-
 
 def main():
     args = parse_args()
@@ -80,15 +144,12 @@ def main():
         )
     logging_dir = os.path.join(args.output_dir, args.logging_dir)
     accelerator_project_config = ProjectConfiguration(total_limit=args.checkpoints_total_limit)
-    # from accelerate import DistributedDataParallelKwargs
-    # ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
     accelerator = Accelerator(
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         mixed_precision=args.mixed_precision,
         log_with=args.report_to,
         logging_dir=logging_dir,
         project_config=accelerator_project_config,
-        #kwargs_handlers=[ddp_kwargs]
     )
 
     generator = torch.Generator(device=accelerator.device).manual_seed(args.seed)
@@ -119,95 +180,69 @@ def main():
             os.makedirs(args.output_dir, exist_ok=True)
         if os.path.join(args.output_dir,'grid') is not None:
             os.makedirs(os.path.join(args.output_dir,'grid'), exist_ok=True)
-        args.dump(os.path.join(args.output_dir, 'experiment_config.py'))
+    args.dump(os.path.join(args.output_dir, 'experiment_config.py'))
     # Load scheduler, tokenizer and models.
     noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
+    tokenizer = CLIPTokenizer.from_pretrained(
+        args.pretrained_model_name_or_path, subfolder="tokenizer", revision=args.revision
+    )
     text_encoder = CLIPTextModel.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="text_encoder", revision=args.revision
     )
-    vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision)
-    unet = UNet_EMASC.from_pretrained(
-       args.pretrained_model_name_or_path, subfolder="unet", revision=args.non_ema_revision,low_cpu_mem_usage=False
+    vae = AutoencoderKL_EMASC.from_pretrained(args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision, low_cpu_mem_usage=False)
+    unet = UNet2DConditionModel.from_pretrained(
+        args.pretrained_model_name_or_path, subfolder="unet", revision=args.non_ema_revision
     )
-    # unet = UNet_EMASC.from_pretrained(
-    #    '/data1/hzj/agnostic_norm_hair_have_background/checkpoint-50000', subfolder="unet", revision=args.non_ema_revision, # low_cpu_mem_usage=False
-    # )
-    # unet = UNet_EMASC(cross_attention_dim=768, block_out_channels=(320,320,640,640),norm_num_groups=32,sample_size=64, in_channels=4, out_channels=4)
-
-    # encoder hidden proj
-    encoder_hid_dim = 1024
-    unet.register_to_config(encoder_hid_dim=encoder_hid_dim)
-    unet.encoder_hid_proj = nn.Linear(encoder_hid_dim, unet.cross_attention_dim)
 
     # Freeze vae and text_encoder
     vae.requires_grad_(False)
     text_encoder.requires_grad_(False)
 
-    # Create EMA for the unet.
-    if args.use_ema:
-        ema_unet = EMAModel(train_params, model_cls=UNet2DConditionModel, model_config=unet.config)
+    vae_trainable_params = []
+    for name, param in vae.named_parameters():
+        if 'emasc' in name:
+            param.requires_grad = True
+            vae_trainable_params.append(param)
 
-    if args.enable_xformers_memory_efficient_attention:
-        if is_xformers_available():
-            import xformers
+    print(f"VAE total params = {len(list(vae.named_parameters()))}, trainable params = {len(vae_trainable_params)}")
 
-            xformers_version = version.parse(xformers.__version__)
-            print('xformer_version', xformers_version)
-            if xformers_version == version.parse("0.0.16"):
-                logger.warn(
-                    "xFormers 0.0.16 cannot be used for training in some GPUs. If you observe problems during training, please update xFormers to at least 0.0.17. See https://huggingface.co/docs/diffusers/main/en/optimization/xformers for more details."
-                )
-            unet.enable_xformers_memory_efficient_attention()
-        else:
-            raise ValueError("xformers is not available. Make sure it is installed correctly")
 
     # `accelerate` 0.16.0 will have better support for customized saving
     if version.parse(accelerate.__version__) >= version.parse("0.16.0"):
         # create custom saving & loading hooks so that `accelerator.save_state(...)` serializes in a nice format
         def save_model_hook(models, weights, output_dir):
-            if args.use_ema:
-                ema_unet.save_pretrained(os.path.join(output_dir, "unet_ema"))
-
             for i, model in enumerate(models):
                 try:
-                    model.save_pretrained(os.path.join(output_dir, "unet"))
+                    # model.to(dtype=torch.float32)
+                    model.save_pretrained(os.path.join(output_dir, "vae"))
                 except:
-                    model_path = os.path.join(output_dir, "warp.pth")
-                    torch.save(model.state_dict(), model_path)
+                    pass
                 # make sure to pop weight so that corresponding model is not saved again
                 weights.pop()
 
         def load_model_hook(models, input_dir):
-            if args.use_ema:
-                load_model = EMAModel.from_pretrained(os.path.join(input_dir, "unet_ema"), UNet2DConditionModel)
-                ema_unet.load_state_dict(load_model.state_dict())
-                ema_unet.to(accelerator.device)
-                del load_model
 
             for i in range(len(models)):
                 # pop models so that they are not loaded again
                 model = models.pop()
 
                 # load diffusers style into model
-                try:
-                    load_model = UNet_EMASC.from_pretrained(input_dir, subfolder="unet")
-                    model.register_to_config(**load_model.config)
+                load_model = AutoencoderKL_EMASC.from_pretrained(input_dir, subfolder="vae")
+                model.register_to_config(**load_model.config)
 
-                    model.load_state_dict(load_model.state_dict())
-                except:
-                    pass
+                model.load_state_dict(load_model.state_dict())
                 del load_model
 
         accelerator.register_save_state_pre_hook(save_model_hook)
         accelerator.register_load_state_pre_hook(load_model_hook)
 
-    if args.gradient_checkpointing:
-       unet.enable_gradient_checkpointing()
+    # if args.gradient_checkpointing:
+    #     vae.enable_gradient_checkpointing()
 
     # Enable TF32 for faster training on Ampere GPUs,
     # cf https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-devices
-    if args.allow_tf32:
-        torch.backends.cuda.matmul.allow_tf32 = True
+    # if args.allow_tf32:
+    #     torch.backends.cuda.matmul.allow_tf32 = True
 
     if args.scale_lr:
         args.learning_rate = (
@@ -227,57 +262,58 @@ def main():
     else:
         optimizer_cls = torch.optim.AdamW
 
-    for name, p in unet.named_parameters():
-        if 'cloth' not in name and 'down' in name and 'fuse' not in name:
-            p.requires_grad = False
-        if 'conv_in' in name and 'cloth' not in name:
-            p.requires_grad = False
-    train_params = [p for n,p in unet.named_parameters() if p.requires_grad]
-    frozen_params = [p for n,p in unet.named_parameters() if not p.requires_grad]
-    # train_params = unet.parameters()
+    def get_parameter_number(model):
+        total_num = sum(p.numel() for p in model.parameters())
+        trainable_num = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        return {'Total': total_num, 'Trainable': trainable_num}
+
+    params_to_optimize = (
+        itertools.chain(vae_trainable_params)
+    )
+
     optimizer = optimizer_cls(
-        train_params,
+        params_to_optimize,
         lr=args.learning_rate,
         betas=(args.adam_beta1, args.adam_beta2),
         weight_decay=args.adam_weight_decay,
         eps=args.adam_epsilon,
-    )  
+    )
     
-    train_dataset1 = CPDataset(args)
-    train_dataset2 = DressCodeDataSet(args)
-    train_dataset = ConcatDataset([train_dataset1, train_dataset2])
-    # train_dataset1 = VTTDataSet(args)
-    # args.datamode = args.infer_datamode
-    # args.data_list = args.infer_data_list
-    # args.datasetting = args.infer_datasetting
-    # train_dataset2 = VTTDataSet(args)
+    # train_dataset1 = CPDataset(args)
+    # train_dataset2 = DressCodeDataSet(args)
     # train_dataset = ConcatDataset([train_dataset1, train_dataset2])
+    train_dataset1 = VTTDataSet(args)
+    args.datamode = args.infer_datamode
+    args.data_list = args.infer_data_list
+    args.datasetting = args.infer_datasetting
+    train_dataset2 = VTTDataSet(args)
+    train_dataset = ConcatDataset([train_dataset1, train_dataset2])
     print('Length DataSet', len(train_dataset1), len(train_dataset2), len(train_dataset))
 
+    # Preprocessing the datasets.
+    # We need to tokenize input captions and transform the images.
+    def tokenize_captions(captions):
+        inputs = tokenizer(
+            captions, max_length=tokenizer.model_max_length, padding="max_length", truncation=True, return_tensors="pt"
+        )
+        return inputs.input_ids
+
+
     def collate_fn(examples):
+        pcm = torch.stack([example["pcm"] for example in examples])
+        pcm = pcm.to(memory_format=torch.contiguous_format).float()
         image = torch.stack([example["image"] for example in examples])
-        cloth = torch.stack([example["cloth"]["paired"] for example in examples])
-        # cloth_mask = torch.stack([example["cloth_mask"]["paired"] for example in examples])
-        # parse_agnostic = torch.stack([example["parse_agnostic"]for example in examples])
-        # densepose = torch.stack([example["densepose"] for example in examples])
+        image = image.to(memory_format=torch.contiguous_format).float()
         agnostic = torch.stack([example["agnostic"] for example in examples])
-        # parse_other = torch.stack([example["parse_other"] for example in examples])
-        pose = torch.stack([example["pose"] for example in examples])
-        dino_fea = torch.stack([example["dino_fea"] for example in examples])
-        high_frequency_map = torch.stack([example["high_frequency_map"]["paired"] for example in examples])
-        # color_map = torch.stack([example["color_map"]["paired"] for example in examples])
+        agnostic = agnostic.to(memory_format=torch.contiguous_format).float()
+        parse_other = torch.stack([example["parse_other"] for example in examples])
+        parse_upper_mask = torch.stack([example["parse_upper_mask"] for example in examples])
         return {
-            "image":image,
-            "cloth":cloth,
-            # "cloth_mask":cloth_mask,
+            "pcm": pcm,
+            "image": image,
             "agnostic":agnostic,
-            "pose":pose,
-            # "densepose":densepose,
-            # "parse_agnostic":parse_agnostic,
-            "dino_fea":dino_fea,
-            "high_frequency_map":high_frequency_map,
-            # "color_map":color_map,
-            # 'parse_other':parse_other
+            'parse_other': parse_other,
+            'parse_upper_mask':parse_upper_mask
         }
 
     # DataLoaders creation:
@@ -304,12 +340,9 @@ def main():
     )
 
     # Prepare everything with our `accelerator`.
-    unet, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
-        unet, optimizer, train_dataloader, lr_scheduler
+    vae.decoder, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+        vae.decoder, optimizer, train_dataloader, lr_scheduler
     )
-
-    if args.use_ema:
-        ema_unet.to(accelerator.device)
 
     # For mixed precision training we cast the text_encoder and vae weights to half-precision
     # as these models are only used for inference, keeping weights in full precision is not required.
@@ -320,8 +353,9 @@ def main():
         weight_dtype = torch.bfloat16
 
     # Move text_encode and vae to gpu and cast to weight_dtype
-    text_encoder.to(accelerator.device, dtype=weight_dtype)
-    vae.to(accelerator.device, dtype=weight_dtype)
+    vae.encoder.to(accelerator.device, dtype=weight_dtype)
+    vae.quant_conv.to(accelerator.device, dtype=weight_dtype)
+    vae.post_quant_conv.to(accelerator.device, dtype=weight_dtype)
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
@@ -377,9 +411,9 @@ def main():
     progress_bar = tqdm(range(global_step, args.max_train_steps), disable=not accelerator.is_local_main_process)
     progress_bar.set_description("Steps")
 
+
     for epoch in range(first_epoch, args.num_train_epochs):
-        unet.train()
-        # tocg.train()
+        vae.decoder.train()
         train_loss = 0.0
         for step, batch in enumerate(train_dataloader):
             # Skip steps until we reach the resumed step
@@ -387,63 +421,38 @@ def main():
                 if step % args.gradient_accumulation_steps == 0:
                     progress_bar.update(1)
                 continue
-            
-            # target 
-            image = batch["image"]
-            
-            # agnostic
-            cloth_agnostic = batch["agnostic"]
-            # cloth_agnostic = batch["parse_other"]
-            pose = batch["pose"]
-            high_frequency_map = batch['high_frequency_map']
-            # color_map = batch["color_map"]
-            # dino_fea
-            dino_fea = batch['dino_fea']
 
-            with accelerator.accumulate(unet):
+            # data
+            mask = batch["parse_upper_mask"]
+            agnostic = batch["agnostic"]
+            # parse_other = batch["parse_other"]
+            image = batch["image"]
+
+            with accelerator.accumulate(vae.decoder):
                 # We want to learn the denoising process w.r.t the edited images which
                 # are conditioned on the original image (which was edited) and the edit instruction.
                 # So, first, convert images to latent space.
-                latents = vae.encode(image.to(weight_dtype)).latent_dist.sample()
+                with torch.no_grad():
+                    latents, _ = vae.encode(image.to(weight_dtype),return_inter_features=True)
+                    # _, inter_features = vae.encode(parse_other.to(weight_dtype),return_inter_features=True)
+                    _, inter_features = vae.encode(agnostic.to(weight_dtype),return_inter_features=True)
+                latents = latents.latent_dist.sample()
+                feature_conv_out, feature_conv_up_3, feature_conv_up_2, feature_conv_up_1 = inter_features
+                # latents = latents.float()
+                # feature_conv_out = feature_conv_out.float()
+                # feature_conv_up_3 = feature_conv_up_3.float()
+                # feature_conv_up_2 = feature_conv_up_2.float()
+                # feature_conv_up_1 = feature_conv_up_1.float()
                 latents = latents * vae.config.scaling_factor
 
-                # Sample noise that we'll add to the latents
-                noise = torch.randn_like(latents)
-                bsz = latents.shape[0]
-                # Sample a random timestep for each image
-                timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device)
-                timesteps = timesteps.long()
+                latents = 1 / vae.config.scaling_factor * latents
+                pred_images = vae.decode(latents, mask, feature_conv_out, feature_conv_up_1, feature_conv_up_2, feature_conv_up_3).sample
+                pred_images = pred_images.clamp(-1, 1)
 
-                # Add noise to the latents according to the noise magnitude at each timestep
-                # (this is the forward diffusion process)
-                noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
+                loss_mse = F.mse_loss(pred_images.float(), image.clamp(-1, 1).float(), reduction="mean")
+                # loss_vgg = criterionVGG(pred_images.float(), image.clamp(-1, 1).float())
 
-                # Get the pose embedding for conditioning.
-                encoder_hidden_states = dino_fea
-
-                # Get the additional image embedding for conditioning.
-                # Instead of getting a diagonal Gaussian here, we simply take the mode.
-                high_frequency_map = vae.encode(high_frequency_map.to(weight_dtype)).latent_dist.mode()
-                # color_map = vae.encode(color_map.to(weight_dtype)).latent_dist.mode()
-
-                # agnostic encode
-                masked_image_embeds = vae.encode(cloth_agnostic.to(weight_dtype)).latent_dist.mode()
-                pose_embeds = F.interpolate(pose.to(weight_dtype), scale_factor=(0.125,0.125))
-
-                # Concatenate the `original_image_embeds` with the `noisy_latents`.
-                condition_latent = torch.cat([high_frequency_map, masked_image_embeds, pose_embeds],dim=1)
-
-                # Get the target for loss depending on the prediction type
-                if noise_scheduler.config.prediction_type == "epsilon":
-                    target = noise
-                elif noise_scheduler.config.prediction_type == "v_prediction":
-                    target = noise_scheduler.get_velocity(latents, noise, timesteps)
-                else:
-                    raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
-
-                # Predict the noise residual and compute loss
-                model_pred = unet(noisy_latents, condition_latent, timesteps, encoder_hidden_states).sample
-                loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
+                loss = loss_mse # + loss_vgg * 0.1
 
                 # Gather the losses across all processes for logging (if we use distributed training).
                 avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean()
@@ -451,16 +460,24 @@ def main():
 
                 # Backpropagate
                 accelerator.backward(loss)
+                
+                # for name, param in vae.named_parameters():
+                #     if param.grad is not None:
+                #         print(name,torch.max(param.grad))           
+                #     else:
+                #         print(name)
+                
                 if accelerator.sync_gradients:
-                    accelerator.clip_grad_norm_(train_params, args.max_grad_norm)
+                    params_to_clip = (
+                        itertools.chain(vae.parameters())
+                    )
+                    accelerator.clip_grad_norm_(params_to_clip, args.max_grad_norm)
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
 
             # Checks if the accelerator has performed an optimization step behind the scenes
             if accelerator.sync_gradients:
-                if args.use_ema:
-                    ema_unet.step(train_params)
                 progress_bar.update(1)
                 global_step += 1
                 accelerator.log({"train_loss": train_loss}, step=global_step)
@@ -470,6 +487,7 @@ def main():
                     if accelerator.is_main_process:
                         save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")
                         accelerator.save_state(save_path)
+                        vae.save_pretrained(os.path.join(save_path, "vae"))
                         logger.info(f"Saved state to {save_path}")
 
             logs = {"step_loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
@@ -478,37 +496,24 @@ def main():
             if global_step >= args.max_train_steps:
                 break
 
+            if accelerator.is_main_process and global_step % 100 == 0:
+                grid = make_image_grid([(image[0].cpu() / 2 + 0.5), (mask[0].cpu()).expand(3, -1, -1), 
+                (agnostic[0].cpu() / 2 + 0.5), (pred_images[0].cpu().detach() / 2 + 0.5)],
+                nrow=2)
+                save_image(grid, os.path.join(args.output_dir, 'grid', 'step%d.jpg'%global_step))
+                
+
     # Create the pipeline using the trained modules and save it.
     accelerator.wait_for_everyone()
     if accelerator.is_main_process:
-        unet = accelerator.unwrap_model(unet)
-        if args.use_ema:
-            ema_unet.copy_to(train_params)
-
         pipeline = StableDiffusionInstructPix2PixPipeline.from_pretrained(
             args.pretrained_model_name_or_path,
-            text_encoder=accelerator.unwrap_model(text_encoder),
+            text_encoder=text_encoder,
             vae=accelerator.unwrap_model(vae),
             unet=unet,
             revision=args.revision,
         )
         pipeline.save_pretrained(args.output_dir)
-
-        if args.validation_prompt is not None:
-            edited_images = []
-            pipeline = pipeline.to(accelerator.device)
-            with torch.autocast(str(accelerator.device).replace(":0", "")):
-                for _ in range(args.num_validation_images):
-                    edited_images.append(
-                        pipeline(
-                            args.validation_prompt,
-                            image=original_image,
-                            num_inference_steps=20,
-                            image_guidance_scale=1.5,
-                            guidance_scale=7,
-                            generator=generator,
-                        ).images[0]
-                    )
 
     accelerator.end_training()
 

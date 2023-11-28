@@ -11,6 +11,12 @@ from PIL import Image
 sys.path.append('./mae')
 
 from mae.util.decoder.utils import tensor_normalize, spatial_sampling
+import random
+# seed 
+seed = 4
+random.seed(seed)
+torch.manual_seed(seed)
+torch.cuda.manual_seed(seed)
 
 MEAN = (0.45, 0.45, 0.45)
 STD = (0.225, 0.225, 0.225)
@@ -39,11 +45,12 @@ msg = model.load_state_dict(checkpoint['model'], strict=False)
 model = model.cuda().to(dtype=torch.float16)
 
 # load data into tensor
-file_path = 'test_guide'
+file_path = 'mae_test/07148_00_smooth'
 frames = []
 frame_names = sorted(os.listdir(file_path))
 for franme_name in frame_names:
-    print(franme_name)
+    if franme_name[-3:] == 'gif':
+        continue
     frame_path = os.path.join(file_path, franme_name)
     frame = Image.open(frame_path)
     frame = torch.tensor(np.array(frame))
@@ -70,7 +77,8 @@ frames = spatial_sampling(
 )
 print(frames.shape)
 frames = frames.cuda().to(dtype=torch.float16)
-loss, _, _, vis = model(frames.unsqueeze(0), 1, mask_ratio=0.5, visualize=True)
-vis = vis.detach().cpu()
-print(loss)
+for ratio in [0.3, 0.5, 0.7, 0.9]:
+    loss, _, _, vis = model(frames.unsqueeze(0), 1, mask_ratio=ratio, visualize=True)
+    vis = vis.detach().cpu()
+    print(ratio, loss)
 plot_input(vis[0].permute(0, 2, 1, 3, 4))

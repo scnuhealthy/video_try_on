@@ -293,8 +293,8 @@ if __name__ == '__main__':
     from PIL import Image
     import numpy as np
     
-    vae_path = 'parse_other_vae_model/checkpoint-2000'
-    # vae_path = 'save_models/HR_VITON_vae/'
+    # vae_path = 'parse_other_vae_model/checkpoint-2000'
+    vae_path = '../virtual_try_on_code/save_models/HR_VITON_vae'
     # vae_path = '/data1/hzj/clothes_model_vae/'
     # vae_path = 'runwayml/stable-diffusion-v1-5'
     vae= AutoencoderKL_EMASC.from_pretrained(
@@ -315,12 +315,13 @@ if __name__ == '__main__':
     test_dataset = CPDatasetTest(opt)
     test_dataloader = CPDataLoader(batch_size=1,workers=4,shuffle=True,dataset=test_dataset,collate_fn=collate_fn)
 
-    for i in range(15):
+    for i in range(5):
         batch = test_dataloader.next_batch()
         image = batch['image'].cuda()
         # mask = batch['pcm'].cuda()
         mask = batch['parse_upper_mask'].cuda()
-        agnostic = batch['parse_other'].cuda()
+        agnostic = batch['agnostic'].cuda()
+        # agnostic = batch['parse_other'].cuda()
         out = image[0].cpu() /2 +0.5
         out = out.detach().permute(1,2,0).numpy()
         out = (out * 255).astype(np.uint8)

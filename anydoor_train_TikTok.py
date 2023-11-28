@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
-from torch.utils.data import ConcatDataset
+from torch.utils.data import ConcatDataset, WeightedRandomSampler
 import transformers
 from accelerate import Accelerator
 from accelerate.logging import get_logger
@@ -35,10 +35,12 @@ from diffusers.models.vae import Encoder
 from CPDataset_HD import CPDataset
 from VTTDataSet import VTTDataSet
 from DressCodeDataSet import DressCodeDataSet
+from TikTokDataSet import TikTokDataSet
 from torchvision.utils import make_grid as make_image_grid
 from torchvision.utils import save_image
 from mmengine import Config
 from utils import remove_overlap
+
 
 logger = get_logger(__name__, log_level="INFO")
 
@@ -126,18 +128,18 @@ def main():
         args.pretrained_model_name_or_path, subfolder="text_encoder", revision=args.revision
     )
     vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision)
-    unet = UNet_EMASC.from_pretrained(
-       args.pretrained_model_name_or_path, subfolder="unet", revision=args.non_ema_revision,low_cpu_mem_usage=False
-    )
     # unet = UNet_EMASC.from_pretrained(
-    #    '/data1/hzj/agnostic_norm_hair_have_background/checkpoint-50000', subfolder="unet", revision=args.non_ema_revision, # low_cpu_mem_usage=False
+    #    args.pretrained_model_name_or_path, subfolder="unet", revision=args.non_ema_revision,low_cpu_mem_usage=False
     # )
+    unet = UNet_EMASC.from_pretrained(
+       'model_VITON_512_fixbug/checkpoint-120000', subfolder="unet", revision=args.non_ema_revision, # low_cpu_mem_usage=False
+    )
     # unet = UNet_EMASC(cross_attention_dim=768, block_out_channels=(320,320,640,640),norm_num_groups=32,sample_size=64, in_channels=4, out_channels=4)
 
     # encoder hidden proj
-    encoder_hid_dim = 1024
-    unet.register_to_config(encoder_hid_dim=encoder_hid_dim)
-    unet.encoder_hid_proj = nn.Linear(encoder_hid_dim, unet.cross_attention_dim)
+    # encoder_hid_dim = 1024
+    # unet.register_to_config(encoder_hid_dim=encoder_hid_dim)
+    # unet.encoder_hid_proj = nn.Linear(encoder_hid_dim, unet.cross_attention_dim)
 
     # Freeze vae and text_encoder
     vae.requires_grad_(False)
@@ -243,16 +245,14 @@ def main():
         eps=args.adam_epsilon,
     )  
     
+    train_dataset0 = TikTokDataSet(args)
     train_dataset1 = CPDataset(args)
     train_dataset2 = DressCodeDataSet(args)
-    train_dataset = ConcatDataset([train_dataset1, train_dataset2])
-    # train_dataset1 = VTTDataSet(args)
-    # args.datamode = args.infer_datamode
-    # args.data_list = args.infer_data_list
-    # args.datasetting = args.infer_datasetting
-    # train_dataset2 = VTTDataSet(args)
-    # train_dataset = ConcatDataset([train_dataset1, train_dataset2])
-    print('Length DataSet', len(train_dataset1), len(train_dataset2), len(train_dataset))
+    weights = [3.0] * len(train_dataset0) + [1.0] * len(train_dataset1) + [1.0] * len(train_dataset2)
+    train_dataset = ConcatDataset([train_dataset0, train_dataset1, train_dataset2])
+    sampler = WeightedRandomSampler(weights, num_samples=len(train_dataset), replacement=True)
+
+    print('Length DataSet', len(train_dataset0), len(train_dataset1), len(train_dataset2))
 
     def collate_fn(examples):
         image = torch.stack([example["image"] for example in examples])
@@ -283,10 +283,11 @@ def main():
     # DataLoaders creation:
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset,
-        shuffle=True,
+        # shuffle=True,
         collate_fn=collate_fn,
         batch_size=args.train_batch_size,
         num_workers=args.dataloader_num_workers,
+        sampler=sampler,
     )
 
     # Scheduler and math around the number of training steps.

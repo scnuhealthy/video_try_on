@@ -21,7 +21,7 @@ from blended_cloth_pipeline import BlendedClothPipeline
 # from new_pipe import BlendedClothPipeline
 
 # seed 
-seed = 4
+seed = 17
 random.seed(seed)
 torch.manual_seed(seed)
 torch.cuda.manual_seed(seed)
@@ -54,8 +54,10 @@ def collate_fn(examples):
     c_name = [example['c_name'][opt.datasetting] for example in examples]
     dino_fea = torch.stack([example["dino_fea"] for example in examples])
     high_frequency_map = torch.stack([example["high_frequency_map"][opt.datasetting] for example in examples])
+    # hog_map = torch.stack([example["hog_map"][opt.datasetting] for example in examples])
     parse_other = torch.stack([example["parse_other"] for example in examples])
     parse_upper_mask = torch.stack([example["parse_upper_mask"] for example in examples])
+    parse = torch.stack([example["parse"] for example in examples])
     return {
         "parse_cloth":parse_cloth,
         "pcm": pcm,
@@ -70,8 +72,10 @@ def collate_fn(examples):
         "c_name":c_name,
         "dino_fea":dino_fea,
         "high_frequency_map":high_frequency_map,
+        # "hog_map":hog_map,
         "parse_other":parse_other,
-        "parse_upper_mask":parse_upper_mask
+        "parse_upper_mask":parse_upper_mask,
+        'parse':parse
     }
 
 if opt.test_dataset == 'DressCode':
@@ -86,16 +90,16 @@ elif opt.test_dataset == 'Wild':
     dataset = WildVideoDataSet(Config.fromfile('wild_config.py'))
     opt.datasetting = 'paired'
 elif opt.test_dataset == 'VTT':
-    from VTTDataSet import VTTDataSet, CPDataLoader
-    dataset = VTTDataSet(opt)
+    from VideoDataSet import VideoDataSet, CPDataLoader
+    dataset = VideoDataSet(opt)
     opt.datasetting = 'paired'
 elif opt.test_dataset == 'TikTok':
     from TikTokDataSet import TikTokDataSet, CPDataLoader
     dataset = TikTokDataSet(opt)
     opt.datasetting = 'paired'
 
-batch_size = 16
-test_dataloader = CPDataLoader(batch_size=batch_size,workers=4,shuffle=False,dataset=dataset,collate_fn=collate_fn)
+batch_size = 10
+test_dataloader = CPDataLoader(batch_size=batch_size,workers=4,shuffle=True,dataset=dataset,collate_fn=collate_fn)
 
 pipe = BlendedClothPipeline.from_pretrained(config.model_path, safety_checker=None, requires_safety_checker=False,torch_dtype=torch.float16).to("cuda")
 if config.unet_path is not None:
@@ -130,7 +134,7 @@ masked_image_guidance_scale = 1
 weight_dtype = torch.float16
 
 image_idx = 0
-for i in range(0,4):
+for i in range(0,20):
 # for i, batch in enumerate(test_dataloader.data_loader):
     batch = test_dataloader.next_batch()
     # image = batch['image'].cuda()
@@ -142,6 +146,8 @@ for i in range(0,4):
     agnostic = batch['agnostic'].to(device='cuda',dtype=weight_dtype)
     pose = batch['pose'].to(device='cuda', dtype=weight_dtype)
     high_frequency_map = batch['high_frequency_map'].to(device='cuda',dtype=weight_dtype)
+    # high_frequency_map = torch.zeros_like(high_frequency_map).to(device='cuda',dtype=weight_dtype)
+    # hog_map = batch['hog_map'].to(device='cuda',dtype=weight_dtype)
 
     # dino_fea
     dino_fea = batch['dino_fea'].to(device='cuda',dtype=weight_dtype)
@@ -151,6 +157,9 @@ for i in range(0,4):
     parse_other = batch['parse_other'].to(device='cuda', dtype=weight_dtype)
     parse_upper_mask = batch['parse_upper_mask'].to(device='cuda', dtype=weight_dtype)
     target_image = batch['image']
+
+    # vis
+    parse = batch['parse']
 
     edited_images = pipe(
         masked_image=agnostic,
@@ -166,23 +175,33 @@ for i in range(0,4):
         # mask = pcm,
         gt = target_image.to(device='cuda', dtype=weight_dtype),
         high_frequency_map = high_frequency_map,
+        # hog_map = hog_map,
         dino_fea = dino_fea,
     ).images
 
-    
     for idx, edited_image in enumerate(edited_images):
         name1 = im_name[idx].split('/')[1] + '+' + im_name[idx].split('/')[-1][:-4] + '+' + c_name[idx].split('/')[-1]
         # name1 = im_name[idx].split('/')[-1]
         name2 = im_name[idx].split('/')[1] + '+' + im_name[idx].split('/')[-1][:-4] + '+' + c_name[idx].split('/')[-1][:-4] + '_cond.jpg'
         
-        edited_image.save(os.path.join(out_dir, name1))
+        # edited_image.save(os.path.join(out_dir, name1))
 
         edited_image = torch.tensor(np.array(edited_image)).permute(2,0,1) / 255.0
         grid = make_image_grid([(c_paired[idx].cpu() / 2 + 0.5),(high_frequency_map[idx].cpu().detach() / 2 + 0.5), (parse_other[idx].cpu().detach() / 2 + 0.5),
-        (pose[idx].cpu().detach() / 2 + 0.5),(agnostic[idx].cpu().detach() / 2 + 0.5), 
+        (pose[idx].cpu().detach() / 2 + 0.5),(agnostic[idx].cpu().detach() / 2 + 0.5), visualize_segmap(parse[idx].unsqueeze(0).cpu()),
         (target_image[idx].cpu() /2 +0.5), edited_image.cpu(),
         ], nrow=4)
         # save_image(grid, os.path.join(out_dir, ('%d.jpg'%image_idx).zfill(6)))
         save_image(grid, os.path.join(out_dir, name2))
         image_idx +=1
         print(im_name[idx],c_name[idx], name2)
+
+    # for idx, edited_image in enumerate(edited_images):
+    #     edited_image = torch.tensor(np.array(edited_image)).permute(2,0,1) / 255.0
+    #     grid = make_image_grid([(c_paired[idx].cpu() ),(high_frequency_map[idx].cpu().detach() ), (parse_other[idx].cpu().detach() ),
+    #     (pose[idx].cpu().detach() ),(agnostic[idx].cpu().detach() ),
+    #     (target_image[idx].cpu() ), edited_image.cpu(),
+    #     ], nrow=4)
+    #     save_image(grid, os.path.join(out_dir, ('%d.jpg'%image_idx).zfill(6)))
+    #     image_idx +=1
+
