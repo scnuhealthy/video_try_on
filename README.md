@@ -74,7 +74,7 @@ Once the dataset is downloaded, the folder structure should look like this:
 1. Download the VVT Dataset (ask the author)
 2. Pose estimation
 3. Feature extraction, use `extract_dino_fea_vtt.py` 
-
+```
 ├── VVT
 |   ├── test_pairs.txt
 |   ├── train_pairs.txt
@@ -97,14 +97,14 @@ Once the dataset is downloaded, the folder structure should look like this:
 │   │   │   ├── [4he21d00f-g11 | 4he21d00f-k11 | ...]
 |   ├── test_openpose_json
 │   │   │   ├── [4he21d00f-g11 | 4he21d00f-k11 | ...]
-
+```
 #### TikTok Dataset
 1. Download the [TikTok Dataset](https://www.yasamin.page/hdnet_tiktok#h.jr9ifesshn7v)
 2. Pre-process
     1. openpose for pose estimation
     2. parsing by [SCHPA](https://github.com/hrushikesh26/Self-Correction-Human-Parsing-for-ACGPN)
     3. feature extraction, use `extract_dino_fea.py` 
-
+```
 ├── TikTok
 |   ├── test_pairs.txt
 |   ├── train_pairs.txt
@@ -122,25 +122,26 @@ Once the dataset is downloaded, the folder structure should look like this:
 │   │   │   ├── [00001 | 00002 | ...]
 |   ├── TikTok_dataset
 │   │   │   ├── [00001 | 00002 | ...]
-
+```
 ## Pretrain model preparation ##
 1. Download [Stable Diffusion 1.5](https://huggingface.co/runwayml/stable-diffusion-v1-5)
 2. Download [mae pretrain model](https://dl.fbaipublicfiles.com/video-mae-100x4-joint.pth)
 
 ## Trained model ##
-**unet** \
-agnostic_norm_hair_have_background: VITON, DressCode, Wild Video使用, 但是这个模型在down fuse存在一个bug \
-agnostic_nonorm_hair_have_background_black nonorm: nonorm, 有背景和头发，但是agnostic的cloth用黑色mask \
-agnostic_nonorm_hair_have_background_gray nonorm: nonorm, 有背景和头发，但是agnostic的cloth用常规的灰色mask \
-model_VITON_512_fixbug: 上面的模型将这个bug修复后 \ 
-model_VTT_192_256_1030_fixbug： VTT \
-model_VTT_192_256_1030_fixbug_long: VTT \ 
-model_TikTok_512_fixbug_1107:   TikTok \
-model_TikTok_512_fixbug_1109_atr: TikTTok, parse use atr \
-model_TikTok_512_fixbug_1109_lip:: TikTok, parse use lip \
+**unet** 
+* agnostic_norm_hair_have_background: VITON, DressCode, Wild Video使用, 但是这个模型在down fuse存在一个bug 
+* agnostic_nonorm_hair_have_background_black nonorm: nonorm, 有背景和头发，但是agnostic的cloth用黑色mask 
+* agnostic_nonorm_hair_have_background_gray nonorm: nonorm, 有背景和头发，但是agnostic的cloth用常规的灰色mask 
+* model_VITON_512_fixbug: 上面的模型将这个bug修复后 
+* model_VTT_192_256_1030_fixbug： VTT 
+* model_VTT_192_256_1030_fixbug_long: VTT 
+* model_TikTok_512_fixbug_1107:   TikTok 
+* model_TikTok_512_fixbug_1109_atr: TikTTok, parse use atr 
+* model_TikTok_512_fixbug_1109_lip:: TikTok, parse use lip 
+
 **vae**
-HR_VITON_vae： 通用的用emasc ft后的vae
-model_VTT_vae: VVT数据集的vae
+* HR_VITON_vae： 通用的用emasc ft后的vae
+* model_VTT_vae: VVT数据集的vae
 
 ## Training ##
 Train the network for VITON, DressCode
@@ -185,9 +186,4 @@ anydoor_train时 读自己得模型不需要删除conv
 wild_config.py WildVideoDataset.py 用wild视频直接换衣
 
 ## Demo ##
-<video src="figures/Figure12_TikTok_case1.mp4" width="512" height="384" controls>
-  您的浏览器不支持视频标签。
-</video>
-<video src="figures/Figure12_TikTok_case5.mp4" width="512" height="384" controls>
-  您的浏览器不支持视频标签。
-</video>
+<img src="figures/case1.gif" width="576" height="304"> <img src="figures/case2.gif" width="576" height="304">
