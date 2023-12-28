@@ -5,6 +5,9 @@
 ## Method piepeline ##
 <img src="figures/p2.png" width="1000" height="330">
 
+## Requirements
+diffusers==0.17.0
+
 ## DataSet and pre-process
 #### VITON-HD
 

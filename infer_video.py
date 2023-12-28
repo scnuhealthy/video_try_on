@@ -23,7 +23,6 @@ from video_models.video_pipeline import VideoPipeline
 from einops import rearrange
 import imageio
 from VTTDataSet_train import VTTDataSet
-from CUHKDataSet import CUHKDataSet
 # seed 
 seed = 4
 random.seed(seed)

@@ -180,10 +180,14 @@ for i in range(0,20):
     ).images
 
     for idx, edited_image in enumerate(edited_images):
-        name1 = im_name[idx].split('/')[1] + '+' + im_name[idx].split('/')[-1][:-4] + '+' + c_name[idx].split('/')[-1]
-        # name1 = im_name[idx].split('/')[-1]
-        name2 = im_name[idx].split('/')[1] + '+' + im_name[idx].split('/')[-1][:-4] + '+' + c_name[idx].split('/')[-1][:-4] + '_cond.jpg'
-        
+        if opt.test_dataset == 'TikTok':
+            name1 = im_name[idx].split('/')[1] +  + im_name[idx].split('/')[-1][:-4] + '+' + c_name[idx].split('/')[-1]
+            name2 = im_name[idx].split('/')[1] + '+' + im_name[idx].split('/')[-1][:-4] + '+' + c_name[idx].split('/')[-1][:-4] + '_cond.jpg'
+        elif opt.test_dataset == 'VITON' or opt.test_dataset == 'DressCode':
+            name1 = im_name[idx].split('/')[0] + '+' + c_name[idx]
+            name2 = im_name[idx].split('/')[0] + '+' + c_name[idx].split('/')[0][:-4] + '_cond.jpg'
+        else:
+            pass
         # edited_image.save(os.path.join(out_dir, name1))
 
         edited_image = torch.tensor(np.array(edited_image)).permute(2,0,1) / 255.0

@@ -2,7 +2,7 @@
 dataroot = '/data1/hzj/zalando-hd-resized'
 dataroot2 = '/data1/hzj/DressCode/upper_body/'
 dataroot3 = '/data1/hzj/192_256/'
-dataroot4 = '/data1/hzj/TikTok_dataset2/'
+dataroot4 = '/data0/hzj/datasets/TikTok_dataset2/'
 vtt_data_list = '/data1/hzj/192_256/custom_test_pairs.txt'
 fine_height = 512
 fine_width = 384
@@ -14,22 +14,51 @@ semantic_nc = 13
 # infer 
 model_path = '/data0/hzj/sd_models/df-1.5'  # basic stable diffusion
 
-# unet_path = 'model_TikTok_512_fixbug_1109_atr/checkpoint-60000'
-unet_path = 'model_TikTok_512_fixbug_1109_lip/checkpoint-150000'  # tiktok model
-# unet_path = 'model_VTT_192_256_1030_fixbug/checkpoint-80000'    # VVT model
-# unet_path = 'model_VTT_192_256_1023/checkpoint-62000'           # VVT model
-# unet_path = '/data1/hzj/agnostic_norm_hair_have_background/checkpoint-50000/'  # VITON-HD and DressCode model
-# vae_path = 'model_TikTok_vae_512_fixbug/checkpoint-4000'         # TikTok vae, not use
-vae_path = '../virtual_try_on_code/save_models/HR_VITON_vae'       # VITON vae
-# vae_path = 'model_VTT_vae/checkpoint-8000'                       # VTT vae, not use
-# vae_path = 'parse_other_norm_nobackground_vae/checkpoint-14000'
-out_dir = 'test_TikTok_video_demo/test1'
+# # VITON 
+# unet_path = '/data0/hzj/anydoor/trained_models/model_VITON_512_fixbug/checkpoint_120000'
+# # unet_path = '/data0/hzj/anydoor/trained_models/agnostic_norm_hair_have_background/checkpoint-50000/'  # paper result
+# vae_path = '/data0/hzj/anydoor/trained_models/HR_VITON_vae'
+# test_dataset = 'VITON'
+# infer_datamode = 'test'
+# infer_data_list = 'test_pairs.txt'
+# infer_datasetting = 'unpaired'
+# out_dir = 'gen_test_VITON'
 
+# # DressCode
+# unet_path = '/data0/hzj/anydoor/trained_models/model_VITON_512_fixbug/checkpoint_120000'
+# vae_path = '/data0/hzj/anydoor/trained_models/HR_VITON_vae'
+# test_dataset = 'DressCode'
+# infer_datamode = 'test'
+# infer_data_list = 'test_pairs.txt'
+# infer_datasetting = 'unpaired'
+# out_dir = 'gen_test_DressCode'
+
+# TikTok
+unet_path = '/data0/hzj/anydoor/trained_models/model_TikTok_512_fixbug_1109_lip/checkpoint-150000'  # tiktok model
+vae_path = '/data0/hzj/anydoor/trained_models/HR_VITON_vae'      # VITON vae
+out_dir = 'gen_test_TikTOk'
 test_dataset = 'TikTok'
 infer_datamode = 'test'
-infer_data_list = 'test_pairs.txt'
-# infer_data_list = 'train_unpairs_sp_267_321.txt'
+infer_data_list = 'train_unpairs_sp_267_44.txt'
 infer_datasetting = 'unpaired'
+
+
+# # unet_path = 'model_TikTok_512_fixbug_1109_atr/checkpoint-60000'
+# unet_path = 'model_TikTok_512_fixbug_1109_lip/checkpoint-150000'  # tiktok model
+# # unet_path = 'model_VTT_192_256_1030_fixbug/checkpoint-80000'    # VVT model
+# # unet_path = 'model_VTT_192_256_1023/checkpoint-62000'           # VVT model
+# # unet_path = '/data1/hzj/agnostic_norm_hair_have_background/checkpoint-50000/'  # VITON-HD and DressCode model
+# # vae_path = 'model_TikTok_vae_512_fixbug/checkpoint-4000'         # TikTok vae, not use
+# vae_path = '../virtual_try_on_code/save_models/HR_VITON_vae'       # VITON vae
+# # vae_path = 'model_VTT_vae/checkpoint-8000'                       # VTT vae, not use
+# # vae_path = 'parse_other_norm_nobackground_vae/checkpoint-14000'
+# out_dir = 'test_TikTok_video_demo/test1'
+
+# test_dataset = 'TikTok'
+# infer_datamode = 'test'
+# infer_data_list = 'test_pairs.txt'
+# # infer_data_list = 'train_unpairs_sp_267_321.txt'
+# infer_datasetting = 'unpaired'
 
 # train data
 train_datamode = 'train'
