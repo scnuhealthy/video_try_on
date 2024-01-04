@@ -156,8 +156,8 @@ for i in range(iters):
         pose=pose,
         # cloth_agnostic=parse_other,
         cloth_agnostic=agnostic,
-        mask = parse_upper_mask,
-        # mask = pcm,
+        # mask = parse_upper_mask,
+        mask = pcm,
         gt = target_image.to(device='cuda', dtype=weight_dtype),
         high_frequency_map = high_frequency_map,
         dino_fea = dino_fea,
@@ -200,4 +200,4 @@ for i in range(iters):
         # print(im_name[idx],c_name[idx], name2)
     
     print(len(outputs))
-# imageio.mimsave(os.path.join(out_dir, c_name[0].split('/')[-1][:-4]+'.gif'), outputs, 'GIF', duration=100)
+imageio.mimsave(os.path.join(out_dir, c_name[0].split('/')[-1][:-4]+'.gif'), outputs, 'GIF', duration=100)

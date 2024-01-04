@@ -187,6 +187,8 @@ Fid and Kid for image try-on network. Note that we should resize the GT into the
 ## Other Note ##
 anydoor_train时 读自己得模型不需要删除conv
 wild_config.py WildVideoDataset.py 用wild视频直接换衣
+pipeline 应该用pcm而不是paser_upper_mask, pcm归0区域更小
+
 
 ## Demo ##
 <img src="figures/case1.gif" width="576" height="304"> <img src="figures/case2.gif" width="576" height="304">
