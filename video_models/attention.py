@@ -159,16 +159,7 @@ class BasicTransformerBlock(nn.Module):
         self.use_ada_layer_norm = num_embeds_ada_norm is not None
 
         # Fully
-        # self.attn1 = FullyFrameAttention(
-        #     query_dim=dim,
-        #     heads=num_attention_heads,
-        #     dim_head=attention_head_dim,
-        #     dropout=dropout,
-        #     bias=attention_bias,
-        #     cross_attention_dim=cross_attention_dim if only_cross_attention else None,
-        #     upcast_attention=upcast_attention,
-        # )
-        self.attn1 = Attention(
+        self.attn1 = FullyFrameAttention(
             query_dim=dim,
             heads=num_attention_heads,
             dim_head=attention_head_dim,
@@ -177,6 +168,15 @@ class BasicTransformerBlock(nn.Module):
             cross_attention_dim=cross_attention_dim if only_cross_attention else None,
             upcast_attention=upcast_attention,
         )
+        # self.attn1 = Attention(
+        #     query_dim=dim,
+        #     heads=num_attention_heads,
+        #     dim_head=attention_head_dim,
+        #     dropout=dropout,
+        #     bias=attention_bias,
+        #     cross_attention_dim=cross_attention_dim if only_cross_attention else None,
+        #     upcast_attention=upcast_attention,
+        # )
 
         self.norm1 = AdaLayerNorm(dim, num_embeds_ada_norm) if self.use_ada_layer_norm else nn.LayerNorm(dim)
 
@@ -242,13 +242,13 @@ class BasicTransformerBlock(nn.Module):
                 self.attn1(norm_hidden_states, encoder_hidden_states, attention_mask=attention_mask, inter_frame=inter_frame) + hidden_states
             )
         else:
-            # hidden_states = self.attn1(norm_hidden_states, attention_mask=attention_mask, video_length=video_length, inter_frame=inter_frame) + hidden_states
-            attn_output = self.attn1(
-                norm_hidden_states,
-                encoder_hidden_states=None,
-                attention_mask=attention_mask,
-            )
-            hidden_states = attn_output + hidden_states
+            hidden_states = self.attn1(norm_hidden_states, attention_mask=attention_mask, video_length=video_length, inter_frame=inter_frame) + hidden_states
+            # attn_output = self.attn1(
+            #     norm_hidden_states,
+            #     encoder_hidden_states=None,
+            #     attention_mask=attention_mask,
+            # )
+            # hidden_states = attn_output + hidden_states
 
         if self.attn2 is not None:
             # Cross-Attention

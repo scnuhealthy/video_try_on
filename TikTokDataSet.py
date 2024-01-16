@@ -39,6 +39,7 @@ class TikTokDataSet(data.Dataset):
         im_names = []
         c_names = []
         with open(osp.join(opt.dataroot4, self.data_list), 'r') as f:
+            # for line in f.readlines()[96:]:
             for line in f.readlines():
                 c_name, im_name = line.strip().split()
                 im_names.append(im_name)

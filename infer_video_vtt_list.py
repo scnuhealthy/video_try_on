@@ -112,21 +112,22 @@ generator = torch.Generator("cuda").manual_seed(seed)
 #     'clothes_person/img/AN621DA76/AN621DA76-I11@10=cloth_front.jpg',   # 1
 #     'clothes_person/img/BJ721D03B/BJ721D03B-C11@12=cloth_front.jpg'    
 #     ]
-# clothes_names = [
-#     "clothes_person/img/PC721D06P/PC721D06P-G11@2=cloth_front.jpg",
-#     #"clothes_person/img/TO721D0DO/TO721D0DO-J11@11=cloth_front.jpg",
-#     # "clothes_person/img/ED121D0QS/ED121D0QS-Q11@13.2=cloth_front.jpg",
-#     "clothes_person/img/TO221D0IS/TO221D0IS-K11@10=cloth_front.jpg",
-#     #"clothes_person/img/AN621D0CG/AN621D0CG-K11@12=cloth_front.jpg",
-#     # "clothes_person/img/TO721D0E2/TO721D0E2-K11@14=cloth_front.jpg"
-# ]
 
-# failure case of litter 
 clothes_names = [
-    "clothes_person/img/MG121D006/MG121D006-A11@12=cloth_front.jpg"
+    "clothes_person/img/PC721D06P/PC721D06P-G11@2=cloth_front.jpg",
+    #"clothes_person/img/TO721D0DO/TO721D0DO-J11@11=cloth_front.jpg",
+    # "clothes_person/img/ED121D0QS/ED121D0QS-Q11@13.2=cloth_front.jpg",
+    "clothes_person/img/TO221D0IS/TO221D0IS-K11@10=cloth_front.jpg",
+    #"clothes_person/img/AN621D0CG/AN621D0CG-K11@12=cloth_front.jpg",
+    # "clothes_person/img/TO721D0E2/TO721D0E2-K11@14=cloth_front.jpg"
 ]
 
-video_name = 'failure'
+# # failure case of litter 
+# clothes_names = [
+#     "clothes_person/img/MG121D006/MG121D006-A11@12=cloth_front.jpg"
+# ]
+
+video_name = 'to721d0el-k11'
 for i in range(len(clothes_names)):
     clothes_name = clothes_names[i]
     clothes_name_p = clothes_name.split('/')[-1][:-4]
@@ -137,7 +138,7 @@ for i in range(len(clothes_names)):
     dataset = VTTDataSet(opt, target_c_name=clothes_name)
     opt.datasetting = 'paired'
 
-    batch_size = len(dataset)//16*16
+    batch_size = len(dataset)//16*16 
     # batch_size = 24
     print(batch_size)
     iters=1

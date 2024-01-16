@@ -47,7 +47,7 @@ class VTTDataSet(data.Dataset):
         self.c_names = c_names
         self.target_c_name = target_c_name
         self.group_frames()
-        self.set_group(1)
+        self.set_group(0)
         # self.f = open('wrong_pose_list.txt','w')
 
     def set_group(self, group_idx):

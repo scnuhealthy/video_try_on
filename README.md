@@ -169,8 +169,11 @@ revise the dataset, model in ```config.py```, then
 ```python infer.py```
 
 ### video-level ###
+
+ps: 注意dataset调整起始位置
 ```python infer_video.py```: base video infer. TikTok, VVT, Wild video can use
 
+ps: 注意VTTDataset的set_group 用于设定源数据是哪个
 ```python infer_video_vtt_list```: for VVT, multiple cases prediction
 
 ```python infer_video_mae_guided.py```: add mae guiding
