@@ -274,7 +274,7 @@ class DressCodeDataSet(data.Dataset):
 
         result = {
             'c_name':   c_name,     # for visualization
-            'im_name':  im_name,    # for visualization or ground truth
+            'im_name':  im_name.split('/')[1],    # for visualization or ground truth
             # intput 1 (clothfloww)
             'cloth':    c,          # for input
             'pose': pose_map,       # for conditioning

@@ -26,28 +26,29 @@ model_path = '/root/autodl-tmp/animate/pretrained_models/stable-diffusion-v1-5' 
 # infer_datasetting = 'unpaired'
 # out_dir = 'gen_test_VITON_new_scale2.0_0129_280'
 
-# # DressCode
+# DressCode
 # unet_path = '/data0/hzj/anydoor/trained_models/model_VITON_512_fixbug/checkpoint_120000'
-# vae_path = '/data0/hzj/anydoor/trained_models/HR_VITON_vae'
-# test_dataset = 'DressCode'
-# infer_datamode = 'test'
-# infer_data_list = 'test_pairs.txt'
-# infer_datasetting = 'unpaired'
-# out_dir = 'gen_test_DressCode'
-
-# TikTok
-# unet_path = 'trained_models/model_TikTok_512_fixbug_1109_lip/checkpoint-150000'  # tiktok model
-unet_path = 'model_TikTok_rebuttal_ft_from_TikTok/checkpoint-55000'
-# unet_path = 'model_VITON_512_DINO_large_large_TikTok2/checkpoint-45000'
-# vae_path = 'trained_models/HR_VITON_vae'      # VITON vae
-vae_path = '/root/autodl-tmp/animate/pretrained_models/sd-vae-ft-mse/'
-# out_dir = 'gen_test_TikTOk_rebuttal_large_3.0'
-# out_dir = 'gen_test_TikTok_rebuttal_scale_102_321_video2'
-out_dir = 'gen_test'
-test_dataset = 'TikTok'
+unet_path = 'model_VITON_512_DINO_large_large2/checkpoint-45000'
+vae_path = 'trained_models/HR_VITON_vae'
+test_dataset = 'DressCode'
 infer_datamode = 'test'
-infer_data_list = 'train_unpairs_sp_102_321.txt'
+infer_data_list = 'test_pairs_unpaired.txt'
 infer_datasetting = 'unpaired'
+out_dir = 'gen_test_DressCode_new_scale2.0_0129'
+
+# # TikTok
+# # unet_path = 'trained_models/model_TikTok_512_fixbug_1109_lip/checkpoint-150000'  # tiktok model
+# unet_path = 'model_TikTok_rebuttal_ft_from_TikTok/checkpoint-55000'
+# # unet_path = 'model_VITON_512_DINO_large_large_TikTok2/checkpoint-45000'
+# # vae_path = 'trained_models/HR_VITON_vae'      # VITON vae
+# vae_path = '/root/autodl-tmp/animate/pretrained_models/sd-vae-ft-mse/'
+# # out_dir = 'gen_test_TikTOk_rebuttal_large_3.0'
+# # out_dir = 'gen_test_TikTok_rebuttal_scale_102_321_video2'
+# out_dir = 'gen_test'
+# test_dataset = 'TikTok'
+# infer_datamode = 'test'
+# infer_data_list = 'train_unpairs_sp_102_321.txt'
+# infer_datasetting = 'unpaired'
 
 # # VTT
 # unet_path = 'trained_models/model_VTT_192_256_1030_fixbug/checkpoint-120000'  # tiktok model
