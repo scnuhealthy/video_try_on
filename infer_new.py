@@ -79,7 +79,7 @@ def collate_fn(examples):
     }
 
 if opt.test_dataset == 'DressCode':
-    from DressCodeDataSet import DressCodeDataSet, CPDataLoader
+    from DressCodeDataSet_new import DressCodeDataSet, CPDataLoader
     opt.datasetting = 'paired'
     dataset = DressCodeDataSet(opt)
 elif opt.test_dataset == 'VITON':
@@ -204,21 +204,21 @@ for g in range(2,3):
                 name2 = im_name[idx].split('/')[1] + '+' + im_name[idx].split('/')[-1][:-4] + '+' + c_name[idx].split('/')[-1][:-4] + '_cond.jpg'
             elif opt.test_dataset == 'VITON' or opt.test_dataset == 'DressCode':
                 print(im_name[idx], c_name[idx])
-                name1 = im_name[idx].split('/')[0] + '+' + c_name[idx].split('/')[0][:-4] + '+' + str(g) + '.jpg'
-                name2 = im_name[idx].split('/')[0] + '+' + c_name[idx].split('/')[0][:-4] + '+' + str(g) + '_cond.jpg'
-                name1 = im_name[idx]
+                name1 = im_name[idx].split('.')[0] + '+' + c_name[idx][:-4] + '+' + str(g) + '.jpg'
+                name2 = im_name[idx].split('.')[0] + '+' + c_name[idx][:-4] + '+' + str(g) + '_cond.jpg'
+                # name1 = im_name[idx]
             else:
                 pass
             edited_image.save(os.path.join(out_dir, name1))
-            # hf = unnormalize(high_frequency_map[idx])
-            # hf = transforms.Resize((512,384))(hf)
-            # edited_image = torch.tensor(np.array(edited_image)).permute(2,0,1) / 255.0
-            # grid = make_image_grid([(c_paired[idx].cpu() / 2 + 0.5), hf.cpu().detach(),(parse_other[idx].cpu().detach() / 2 + 0.5),
-            # (pose[idx].cpu().detach() / 2 + 0.5),(agnostic[idx].cpu().detach() / 2 + 0.5), visualize_segmap(parse[idx].unsqueeze(0).cpu()),
-            # (target_image[idx].cpu() /2 +0.5), edited_image.cpu(),
-            # ], nrow=4)
+            hf = unnormalize(high_frequency_map[idx])
+            hf = transforms.Resize((512,384))(hf)
+            edited_image = torch.tensor(np.array(edited_image)).permute(2,0,1) / 255.0
+            grid = make_image_grid([(c_paired[idx].cpu() / 2 + 0.5), hf.cpu().detach(),(parse_other[idx].cpu().detach() / 2 + 0.5),
+            (pose[idx].cpu().detach() / 2 + 0.5),(agnostic[idx].cpu().detach() / 2 + 0.5), visualize_segmap(parse[idx].unsqueeze(0).cpu()),
+            (target_image[idx].cpu() /2 +0.5), edited_image.cpu(),
+            ], nrow=4)
             # save_image(grid, os.path.join(out_dir, ('%d.jpg'%image_idx).zfill(6)))
-            # save_image(grid, os.path.join(out_dir, name2))
+            save_image(grid, os.path.join(out_dir, name2))
             image_idx +=1
             print(im_name[idx],c_name[idx], name2)
 
