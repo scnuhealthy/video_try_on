@@ -143,8 +143,7 @@ class BlendedClothPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraL
         self,
         masked_image: Union[torch.FloatTensor, PIL.Image.Image] = None,
         num_inference_steps: int = 100,
-        image_guidance_scale: float = 7.5,
-        masked_image_guidance_scale: float = 1.5,
+        guidance_scale = 1.0,
         num_images_per_prompt: Optional[int] = 1,
         eta: float = 0.0,
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
@@ -157,7 +156,6 @@ class BlendedClothPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraL
         cloth_agnostic: Optional[torch.FloatTensor] = None,
         gt: Optional[torch.FloatTensor] = None,
         mask: Optional[torch.FloatTensor] = None,
-        high_frequency_map: Optional[torch.FloatTensor] = None,
         dino_fea: Optional[torch.FloatTensor] = None,
     ):
 
@@ -171,9 +169,7 @@ class BlendedClothPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraL
         # here `guidance_scale` is defined analog to the guidance weight `w` of equation (2)
         # of the Imagen paper: https://arxiv.org/pdf/2205.11487.pdf . `guidance_scale = 1`
         # corresponds to doing no classifier free guidance.
-        # do_classifier_free_guidance = image_guidance_scale > 1.0 and masked_image_guidance_scale >= 1.0
-        do_classifier_free_guidance = True
-        guidance_scale = 2.0
+        do_classifier_free_guidance = guidance_scale > 1.0
         # check if scheduler is in sigmas space
         scheduler_is_in_sigma_space = hasattr(self.scheduler, "sigmas")
 
@@ -190,9 +186,8 @@ class BlendedClothPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraL
         timesteps = self.scheduler.timesteps
 
         # 5. Prepare Image latents
-        masked_image_latents, high_frequency_map_latents= self.prepare_image_latents(
+        masked_image_latents = self.prepare_image_latents(
             masked_image,
-            high_frequency_map,
             batch_size,
             num_images_per_prompt,
             prompt_embeds.dtype,
@@ -217,9 +212,8 @@ class BlendedClothPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraL
         if do_classifier_free_guidance:
             negative_prompt_embeds = torch.zeros_like(prompt_embeds)
             prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
-            # uncond_image_latents = torch.zeros_like(masked_image_latents)
-            # masked_image_latents = torch.cat([masked_image_latents, masked_image_latents, uncond_image_latents], dim=0)
-        
+            # prompt_embeds = torch.cat([prompt_embeds, negative_prompt_embeds, negative_prompt_embeds])
+
         # 7. Check that shapes of latents and image match the UNet channels
 
         # 8. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
@@ -232,16 +226,20 @@ class BlendedClothPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraL
                 # Expand the latents if we are doing classifier free guidance.
                 # The latents are expanded 3 times because for pix2pix the guidance\
                 # is applied for both the text and the input image.
-                # latent_model_input = torch.cat([latents] * 3) if do_classifier_free_guidance else latents
-                # pose_embeds_input = torch.cat([pose_embeds, pose_embeds, pose_embeds]) if do_classifier_free_guidance else pose_embeds
                 latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
                 pose_embeds_input = torch.cat([pose_embeds] * 2) if do_classifier_free_guidance else pose_embeds
+                # latent_model_input = torch.cat([latents] * 3) if do_classifier_free_guidance else latents
+                # pose_embeds_input = torch.cat([pose_embeds] * 3) if do_classifier_free_guidance else pose_embeds
                 masked_image_latents_input = torch.cat([masked_image_latents] * 2) if do_classifier_free_guidance else masked_image_latents
-                high_frequency_map_latents_input = torch.cat([high_frequency_map_latents] * 2) if do_classifier_free_guidance else high_frequency_map_latents
+                # if do_classifier_free_guidance:
+                #     zero_latent = torch.zeros_like(masked_image_latents)
+                #     masked_image_latents_input = torch.cat([masked_image_latents, masked_image_latents, zero_latent],dim=0)
+                # else:
+                #     masked_image_latents_input = masked_image_latents
 
                 # concat latents, image_latents in the channel dimension
                 scaled_latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
-                condition_latent_input = torch.cat([high_frequency_map_latents_input, masked_image_latents_input, pose_embeds_input],dim=1)
+                condition_latent_input = torch.cat([masked_image_latents_input, pose_embeds_input],dim=1)
 
                 # predict the noise residual
                 noise_pred = self.unet(scaled_latent_model_input, condition_latent_input, t, encoder_hidden_states=prompt_embeds).sample
@@ -259,11 +257,11 @@ class BlendedClothPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraL
                 if do_classifier_free_guidance:
                     noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
                     noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
-                    # noise_pred_image, noise_pred_masked_image, noise_pred_uncond = noise_pred.chunk(3)
+                    # noise_pred_text, noise_pred_image, noise_pred_uncond = noise_pred.chunk(3)
                     # noise_pred = (
                     #     noise_pred_uncond
-                    #     + image_guidance_scale * (noise_pred_image - noise_pred_masked_image)
-                    #     + masked_image_guidance_scale * (noise_pred_masked_image - noise_pred_uncond)
+                    #     + guidance_scale * (noise_pred_text - noise_pred_image)
+                    #     + 6.5 * (noise_pred_image - noise_pred_uncond)
                     # )
 
                 # Hack:
@@ -630,11 +628,10 @@ class BlendedClothPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraL
         return latents
 
     def prepare_image_latents(
-        self, masked_image, high_frequency_map, batch_size, num_images_per_prompt, dtype, device, generator=None
+        self, masked_image, batch_size, num_images_per_prompt, dtype, device, generator=None
     ):
 
         masked_image = masked_image.to(device=device, dtype=dtype)
-        high_frequency_map = high_frequency_map.to(device=device,dtype=dtype)
 
         batch_size = batch_size * num_images_per_prompt
         if isinstance(generator, list) and len(generator) != batch_size:
@@ -646,13 +643,9 @@ class BlendedClothPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraL
         if isinstance(generator, list):
             masked_image_latents = [self.vae.encode(masked_image[i : i + 1]).latent_dist.mode() for i in range(batch_size)]
             masked_image_latents = torch.cat(masked_image_latents, dim=0)
-            high_frequency_map_latents = [self.vae.encode(high_frequency_map[i : i + 1]).latent_dist.mode() for i in range(batch_size)]
-            high_frequency_map_latents = torch.cat(high_frequency_map_latents, dim=0)
         else:
             masked_image_latents = self.vae.encode(masked_image).latent_dist.mean
-            high_frequency_map_latents = self.vae.encode(high_frequency_map).latent_dist.mean
 
         masked_image_latents = torch.cat([masked_image_latents], dim=0)
-        high_frequency_map_latents = torch.cat([high_frequency_map_latents], dim=0)
 
-        return masked_image_latents, high_frequency_map_latents
+        return masked_image_latents

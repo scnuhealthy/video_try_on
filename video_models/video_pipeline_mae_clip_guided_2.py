@@ -153,27 +153,27 @@ class VideoPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraLoaderMi
 
         # crop
         latent_size = sample.shape[3:]
-        # sample = sample[:,:,:,latent_size[0]//4:latent_size[0]*3//4, latent_size[1]//4:latent_size[1]*3//4]
-        sample = sample[:,:,:,latent_size[0]*1//6:latent_size[0]*5//6, latent_size[1]*1//6:latent_size[1]*5//6]
+        sample = sample[:,:,:,latent_size[0]//4:latent_size[0]*3//4, latent_size[1]//4:latent_size[1]*3//4]
+        # sample = sample[:,:,:,latent_size[0]*1//6:latent_size[0]*5//6, latent_size[1]*1//6:latent_size[1]*5//6]
             
         # Hardcode 0.18215 because stable-diffusion-2-base has not self.vae.config.scaling_factor
         # sample = 1 / 0.18215 * sample
         frames = self.decode_latents(sample, to_numpy=False)
         # frames = self.decode_latents_emasc(sample, cloth_agnostic, mask, to_numpy=False)
 
-        im = frames.detach()
-        im = im.cpu().permute(0, 2, 3, 1).float().numpy()
-        im = self.numpy_to_pil(im)
-        im[10].save('ppp.jpg')
+        # im = frames.detach()
+        # im = im.cpu().permute(0, 2, 3, 1).float().numpy()
+        # im = self.numpy_to_pil(im)
+        # im[10].save('ppp.jpg')
 
         image = transforms.Resize((self.feature_extractor_size, self.feature_extractor_size))(frames)
         image = self.normalize(image).to(latents.dtype)
-        print('22', image.shape)
+        # print('22', image.shape)
         image_embeddings_clip = self.clip_model.get_image_features(image)
         image_embeddings_clip = image_embeddings_clip / image_embeddings_clip.norm(p=2, dim=-1, keepdim=True)
         image_embeddings_clip_0 = image_embeddings_clip[:image_embeddings_clip.shape[0]-1,:]
         image_embeddings_clip_1 = image_embeddings_clip[1:image_embeddings_clip.shape[0],:]
-        print('dada', image_embeddings_clip_0.shape, image_embeddings_clip_1.shape)
+        # print('dada', image_embeddings_clip_0.shape, image_embeddings_clip_1.shape)
         loss_clip = spherical_dist_loss(image_embeddings_clip_0, image_embeddings_clip_1).mean()
 
         frames = frames.permute(0,2,3,1)
@@ -200,8 +200,8 @@ class VideoPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraLoaderMi
         # print('22', frames.shape)
         loss_mae, _, _, vis = self.mae_model(frames.unsqueeze(0), 1, mask_ratio=0.7, visualize=True)
         vis = vis.detach().cpu()
-        plot_input(vis[0].permute(0, 2, 1, 3, 4), save_name='a.jpg')
-        print('loss_clip', loss_clip, 'loss_mae', loss_mae)
+        # plot_input(vis[0].permute(0, 2, 1, 3, 4), save_name='a.jpg')
+        # print('loss_clip', loss_clip, 'loss_mae', loss_mae)
         loss = 0.5*loss_clip + loss_mae
         loss = loss * clip_guidance_scale
 
@@ -379,7 +379,7 @@ class VideoPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraLoaderMi
                     # predict the noise residual
                     noise_pred = self.unet(scaled_latent_model_input, condition_latent_input, t, encoder_hidden_states=prompt_embeds).sample
                     # guided diffusion
-                    if is_guide and t < 900:
+                    if is_guide and t > 500:
                         for p in range(1):
                             noise_pred, latents = self.cond_fn(
                                     latents,

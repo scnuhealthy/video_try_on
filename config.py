@@ -1,6 +1,6 @@
 # data
 dataroot = '/root/autodl-tmp/zalando-hd-resized'
-dataroot2 = '/data1/hzj/DressCode/upper_body/'
+dataroot2 = '/root/autodl-tmp/DressCode/upper_body/'
 dataroot3 = '/root/autodl-tmp/192_256/'
 dataroot4 = '/root/autodl-tmp/TikTok_dataset2/'
 vtt_data_list = '/data1/hzj/192_256/custom_test_pairs.txt'
@@ -14,15 +14,17 @@ semantic_nc = 13
 # infer 
 model_path = '/root/autodl-tmp/animate/pretrained_models/stable-diffusion-v1-5'  # basic stable diffusion
 
-# # VITON 
-# unet_path = 'trained_models/model_VITON_512_fixbug/checkpoint-120000'
+# VITON 
+# # unet_path = 'model_VITON_512_DINO_large_large2/checkpoint-45000'
+# unet_path = 'model_VITON_512_DINO_large/checkpoint-40000'
+# # unet_path = 'trained_models/model_VITON_512_fixbug/checkpoint-120000'
 # # unet_path = '/data0/hzj/anydoor/trained_models/agnostic_norm_hair_have_background/checkpoint-50000/'  # paper result
 # vae_path = 'trained_models/HR_VITON_vae'
 # test_dataset = 'VITON'
 # infer_datamode = 'test'
 # infer_data_list = 'test_pairs.txt'
 # infer_datasetting = 'unpaired'
-# out_dir = 'gen_test_VITON'
+# out_dir = 'gen_test_VITON_new_scale2.0_0129_280'
 
 # # DressCode
 # unet_path = '/data0/hzj/anydoor/trained_models/model_VITON_512_fixbug/checkpoint_120000'
@@ -35,23 +37,28 @@ model_path = '/root/autodl-tmp/animate/pretrained_models/stable-diffusion-v1-5' 
 
 # TikTok
 # unet_path = 'trained_models/model_TikTok_512_fixbug_1109_lip/checkpoint-150000'  # tiktok model
+unet_path = 'model_TikTok_rebuttal_ft_from_TikTok/checkpoint-55000'
+# unet_path = 'model_VITON_512_DINO_large_large_TikTok2/checkpoint-45000'
 # vae_path = 'trained_models/HR_VITON_vae'      # VITON vae
-# out_dir = 'gen_test_TikTOk'
-# test_dataset = 'TikTok'
-# infer_datamode = 'test'
-# infer_data_list = 'train_unpairs_sp_267_44.txt'
-# infer_datasetting = 'unpaired'
-
-# VTT
-unet_path = 'trained_models/model_VTT_192_256_1030_fixbug/checkpoint-120000'  # tiktok model
-vae_path = 'trained_models/HR_VITON_vae'      # VITON vae
-output_root = 'gen_test_VTT'
-test_dataset = 'VTT'
+vae_path = '/root/autodl-tmp/animate/pretrained_models/sd-vae-ft-mse/'
+# out_dir = 'gen_test_TikTOk_rebuttal_large_3.0'
+# out_dir = 'gen_test_TikTok_rebuttal_scale_102_321_video2'
+out_dir = 'gen_test'
+test_dataset = 'TikTok'
 infer_datamode = 'test'
-infer_data_list = 'test_pairs_sp.txt'
+infer_data_list = 'train_unpairs_sp_102_321.txt'
 infer_datasetting = 'unpaired'
-fine_height = 256
-fine_width = 192
+
+# # VTT
+# unet_path = 'trained_models/model_VTT_192_256_1030_fixbug/checkpoint-120000'  # tiktok model
+# vae_path = 'trained_models/HR_VITON_vae'      # VITON vae
+# output_root = 'gen_test_VTT'
+# test_dataset = 'VTT'
+# infer_datamode = 'test'
+# infer_data_list = 'test_pairs_sp.txt'
+# infer_datasetting = 'unpaired'
+# fine_height = 256
+# fine_width = 192
 
 # # unet_path = 'model_TikTok_512_fixbug_1109_atr/checkpoint-60000'
 # unet_path = 'model_TikTok_512_fixbug_1109_lip/checkpoint-150000'  # tiktok model
@@ -71,8 +78,10 @@ train_data_list = 'train_pairs.txt'
 train_datasetting = 'paired'
 
 # train
-pretrained_model_name_or_path = '/data0/hzj/sd_models/df-1.5'
-output_dir = 'model_TikTok_512_fixbug_1109_lip'
+pretrained_model_name_or_path = '/root/autodl-tmp/animate/pretrained_models/stable-diffusion-v1-5'
+# output_dir = 'model_VITON_512_DINO_large_large_TikTok2'  # one-stage train
+output_dir = 'model_VITON_512_DINO_large_large2'  # one-stage train
+# output_dir = 'model_TikTok_rebuttal_ft_from_TikTok'
 # output_dir = 'model_VTT_vae_fixhand'
 revision = None
 validation_prompt = None
@@ -84,10 +93,10 @@ seed = 42
 resolution = 256
 center_crop = False
 random_flip = True
-train_batch_size = 4
+train_batch_size = 16
 max_train_steps = None
 num_train_epochs = 1000
-gradient_accumulation_steps = 2
+gradient_accumulation_steps = 1
 gradient_checkpointing = True
 learning_rate = 5e-05
 scale_lr = False

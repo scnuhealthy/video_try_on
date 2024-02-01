@@ -19,10 +19,13 @@ from autoencoder_kl_emasc import AutoencoderKL_EMASC
 from utils import remove_overlap,visualize_segmap
 from unet_emasc import UNet_EMASC
 from video_models.unet import UNet3DConditionModel
-from video_models.video_pipeline import VideoPipeline
+from video_models.video_pipeline_new import VideoPipeline
 from einops import rearrange
 import imageio
 from VTTDataSet_train import VTTDataSet
+from dino_module import FrozenDinoV2Encoder
+import torchvision.transforms as transforms
+
 # seed 
 seed = 4
 random.seed(seed)
@@ -31,7 +34,7 @@ torch.cuda.manual_seed(seed)
 
 
 # dataset
-config = Config.fromfile('config.py')
+config = Config.fromfile('config_new.py')
 opt = copy.deepcopy(config)
 mode = 'test'
 if mode == 'test':
@@ -44,7 +47,7 @@ else:
     opt.datasetting = config.train_datasetting
 # dataset = VTTDataSet(opt,level='image')
 # dataset = CUHKDataSet(opt,level='image')
-from TikTokDataSet import TikTokDataSet, CPDataLoader
+from TikTokDataSet_new import TikTokDataSet, CPDataLoader
 dataset = TikTokDataSet(opt)
 opt.datasetting = 'paired'
 print('dataset len:',len(dataset))
@@ -66,7 +69,7 @@ def collate_fn(examples):
     # c_name = [example['c_name'] for example in examples]
     c_name = [example['c_name']['paired'] for example in examples]
     im_name = [example['im_name'] for example in examples]
-    dino_fea = torch.stack([example["dino_fea"] for example in examples])
+    dino_c = torch.stack([example["dino_c"][opt.datasetting] for example in examples])
     # high_frequency_map = torch.stack([example["high_frequency_map"] for example in examples])
     high_frequency_map = torch.stack([example["high_frequency_map"][opt.datasetting] for example in examples])
     parse_other = torch.stack([example["parse_other"] for example in examples])
@@ -80,7 +83,7 @@ def collate_fn(examples):
         "cloth":cloth,
         'c_name':c_name,
         'im_name':im_name,
-        "dino_fea":dino_fea,
+        "dino_c":dino_c,
         "high_frequency_map":high_frequency_map,
         "parse_other":parse_other,
         "parse_upper_mask":parse_upper_mask
@@ -101,7 +104,6 @@ unet.to(dtype=torch.float16)
 # exit()
 if config.vae_path is not None:
     if opt.test_dataset == 'TikTok':
-        print('11111')
         vae= AutoencoderKL.from_pretrained(
             config.vae_path, subfolder="vae",torch_dtype=torch.float16
             ).to("cuda")
@@ -118,16 +120,35 @@ pipe.to("cuda")
 pipe._execution_device = torch.device("cuda")
 
 generator = torch.Generator("cuda").manual_seed(seed)
+dino_encoder = FrozenDinoV2Encoder(freeze=True).to('cuda',dtype=torch.float16)
 
 # infer
 out_dir = config.out_dir
 if not os.path.exists(out_dir):
     os.makedirs(out_dir)
 
-num_inference_steps = 50
-image_guidance_scale = 1
-masked_image_guidance_scale = 1
+num_inference_steps = 30
 weight_dtype = torch.float16
+
+class UnNormalize(object):
+    def __init__(self, mean, std):
+        self.mean = mean
+        self.std = std
+
+    def __call__(self, tensor):
+        """
+        Args:
+            tensor (Tensor): Tensor image of size (C, H, W) to be unnormalized.
+        Returns:
+            Tensor: UnNormalized image.
+        """
+        for t, m, s in zip(tensor, self.mean, self.std):
+            t.mul_(s).add_(m)
+            # 以下代码与上面等效，但更易读
+            # t = t * s + m
+        return tensor
+
+unnormalize = UnNormalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
 
 image_idx = 0
 outputs = []
@@ -143,22 +164,25 @@ for i in range(iters):
     agnostic = batch['agnostic'].to(device='cuda',dtype=weight_dtype)
     pose = batch['pose'].to(device='cuda', dtype=weight_dtype)
     high_frequency_map = batch['high_frequency_map'].to(device='cuda',dtype=weight_dtype)
-
     # dino_fea
-    dino_fea = batch['dino_fea'].to(device='cuda',dtype=weight_dtype)
+    dino_c = batch['dino_c'].to(device='cuda',dtype=weight_dtype)
 
     # vae decoder
     pcm = batch['pcm'].to(device='cuda', dtype=weight_dtype)
     parse_other = batch['parse_other'].to(device='cuda', dtype=weight_dtype)
     parse_upper_mask = batch['parse_upper_mask'].to(device='cuda', dtype=weight_dtype)
     target_image = batch['image']
+
+    dino_c = dino_encoder(dino_c)
+    dino_edge = dino_encoder(high_frequency_map)
+    dino_fea = torch.cat([dino_c, dino_edge], dim=-1) # b,257,1536*2
+    
     # reshape
     edited_images = pipe(
         masked_image=agnostic,
         # masked_image = parse_other,
         num_inference_steps=num_inference_steps, 
-        image_guidance_scale=image_guidance_scale, 
-        masked_image_guidance_scale=masked_image_guidance_scale,
+        guidance_scale=2.5, 
         generator=generator,
         pose=pose,
         # cloth_agnostic=parse_other,
@@ -166,7 +190,6 @@ for i in range(iters):
         # mask = parse_upper_mask,
         mask = pcm,
         gt = target_image.to(device='cuda', dtype=weight_dtype),
-        high_frequency_map = high_frequency_map,
         dino_fea = dino_fea,
         is_long = is_long
     ).images
@@ -193,11 +216,13 @@ for i in range(iters):
         
         # name1 = im_name[idx].split('/')[-1]
         name2 = c_name[idx].split('/')[-1][:-4] + '+' + im_name[idx].split('/')[-1][:-4] + '_cond.jpg'
+        hf = unnormalize(high_frequency_map[idx])
+        hf = transforms.Resize((512,384))(hf)
         edited_image.save(os.path.join(out_dir,('%d.jpg'%image_idx).zfill(6)))
         # edited_image.save(os.path.join(out_dir, name1))
         outputs.append(np.array(edited_image).astype(np.uint8))
         edited_image = torch.tensor(np.array(edited_image)).permute(2,0,1) / 255.0
-        grid = make_image_grid([(c_paired[idx].cpu() / 2 + 0.5),(high_frequency_map[idx].cpu().detach() / 2 + 0.5), (parse_other[idx].cpu().detach() / 2 + 0.5),
+        grid = make_image_grid([(c_paired[idx].cpu() / 2 + 0.5), hf.cpu().detach(), (parse_other[idx].cpu().detach() / 2 + 0.5),
         (pose[idx].cpu().detach() / 2 + 0.5),(agnostic[idx].cpu().detach() / 2 + 0.5),
         (target_image[idx].cpu() /2 +0.5), edited_image.cpu(),
         ], nrow=4)

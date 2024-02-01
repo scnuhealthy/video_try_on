@@ -35,12 +35,17 @@ class TikTokDataSet(data.Dataset):
                 transforms.Normalize([0.5], [0.5]),
                 # transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
+        self.dino_transform = transforms.Compose([
+            transforms.Resize((1022,756), interpolation=transforms.InterpolationMode.BICUBIC),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+        ])
         # load data list
         im_names = []
         c_names = []
         with open(osp.join(opt.dataroot4, self.data_list), 'r') as f:
-            # for line in f.readlines()[96:]:
-            for line in f.readlines():
+            for line in f.readlines()[96:]:
+            # for line in f.readlines():
                 c_name, im_name = line.strip().split()
                 im_names.append(im_name)
                 c_names.append(c_name)
@@ -225,10 +230,11 @@ class TikTokDataSet(data.Dataset):
         #fea_name = '/data1/hzj/DressCode/upper_body/dino_fea/009328_1.pt'
         # c_name = '/root/autodl-tmp/zalando-hd-resized/test/cloth/07421_00.jpg'
         # fea_name = '/root/autodl-tmp/zalando-hd-resized/test/dino_fea/07421_00.pt'
-        dino_fea = torch.load(fea_name, map_location='cpu')
+        # dino_fea = torch.load(fea_name, map_location='cpu')
 
         # cloth
         c = Image.open(c_name).convert('RGB')
+        dino_c = self.dino_transform(c)
         width, height = c.size
         target_ratio = 192 / 256
         new_height = int(width / target_ratio)
@@ -243,8 +249,9 @@ class TikTokDataSet(data.Dataset):
 
         # get high frequency map
         high_frequency_map = get_high_frequency_map(c_name)
-        high_frequency_map = transforms.Resize((self.fine_height,self.fine_width), interpolation=2)(high_frequency_map)
-        high_frequency_map = self.transform(high_frequency_map)  # [-1,1]
+        # high_frequency_map = transforms.Resize((self.fine_height,self.fine_width), interpolation=2)(high_frequency_map)
+        # high_frequency_map = self.transform(high_frequency_map)  # [-1,1]
+        high_frequency_map = self.dino_transform(high_frequency_map)  # [-1,1]
 
         # person image
         im_pil_big = Image.open(osp.join(self.data_path, im_name))
@@ -395,6 +402,7 @@ class TikTokDataSet(data.Dataset):
 
         c = {'paired':c}
         high_frequency_map = {"paired":high_frequency_map}
+        dino_c = {'paired':dino_c}
         c_name = {'paired':c_name}
 
         result = {
@@ -417,7 +425,7 @@ class TikTokDataSet(data.Dataset):
             'image':    im,         # for visualization
             'head': im_h,  # for conditioning and visualization
             'high_frequency_map':high_frequency_map,
-            'dino_fea':dino_fea,
+            'dino_c':dino_c,
             }
 
         return result
@@ -536,6 +544,7 @@ if __name__ == '__main__':
     cloth.save('cloth.jpg')
 
     high_frequency_map = p['high_frequency_map']['paired'].permute(1,2,0).numpy()
+    print(high_frequency_map.shape)
     high_frequency_map *= 255
     high_frequency_map = Image.fromarray(high_frequency_map.astype(np.uint8))
     high_frequency_map.save('high_frequency_map.jpg')

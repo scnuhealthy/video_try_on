@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
-from torch.utils.data import ConcatDataset, WeightedRandomSampler
+from torch.utils.data import ConcatDataset,WeightedRandomSampler
 import transformers
 from accelerate import Accelerator
 from accelerate.logging import get_logger
@@ -32,15 +32,17 @@ from diffusers.utils.import_utils import is_xformers_available
 
 import itertools
 from diffusers.models.vae import Encoder
-from CPDataset_HD import CPDataset
+from CPDataset_HD_new import CPDataset
 from VTTDataSet import VTTDataSet
-from DressCodeDataSet import DressCodeDataSet
-from TikTokDataSet import TikTokDataSet
+from DressCodeDataSet_new import DressCodeDataSet
+from TikTokDataSet_new import TikTokDataSet
 from torchvision.utils import make_grid as make_image_grid
 from torchvision.utils import save_image
 from mmengine import Config
 from utils import remove_overlap
 
+import random
+from dino_module import FrozenDinoV2Encoder
 
 logger = get_logger(__name__, log_level="INFO")
 
@@ -132,12 +134,17 @@ def main():
     #    args.pretrained_model_name_or_path, subfolder="unet", revision=args.non_ema_revision,low_cpu_mem_usage=False
     # )
     unet = UNet_EMASC.from_pretrained(
-       'trained_models/model_TikTok_512_fixbug_1109_lip/checkpoint-150000', subfolder="unet", revision=args.non_ema_revision, # low_cpu_mem_usage=False
+       'model_VITON_512_DINO_large_large/checkpoint-30000', subfolder="unet", revision=args.non_ema_revision, # low_cpu_mem_usage=False
     )
+    dino_encoder = FrozenDinoV2Encoder(freeze=True)
+    # unet = UNet_EMASC.from_pretrained(
+    #    '/data1/hzj/agnostic_norm_hair_have_background/checkpoint-50000', subfolder="unet", revision=args.non_ema_revision, # low_cpu_mem_usage=False
+    # )
     # unet = UNet_EMASC(cross_attention_dim=768, block_out_channels=(320,320,640,640),norm_num_groups=32,sample_size=64, in_channels=4, out_channels=4)
 
     # encoder hidden proj
     # encoder_hid_dim = 1024
+    # encoder_hid_dim = 1024 * 2
     # unet.register_to_config(encoder_hid_dim=encoder_hid_dim)
     # unet.encoder_hid_proj = nn.Linear(encoder_hid_dim, unet.cross_attention_dim)
 
@@ -245,14 +252,16 @@ def main():
         eps=args.adam_epsilon,
     )  
     
-    train_dataset0 = TikTokDataSet(args)
+    # train_dataset = CPDataset(args)
     train_dataset1 = CPDataset(args)
     train_dataset2 = DressCodeDataSet(args)
-    weights = [3.0] * len(train_dataset0) + [1.0] * len(train_dataset1) + [1.0] * len(train_dataset2)
-    train_dataset = ConcatDataset([train_dataset0, train_dataset1, train_dataset2])
-    sampler = WeightedRandomSampler(weights, num_samples=len(train_dataset), replacement=True)
-
-    print('Length DataSet', len(train_dataset0), len(train_dataset1), len(train_dataset2))
+    train_dataset = ConcatDataset([train_dataset1, train_dataset2])
+    # train_dataset0 = TikTokDataSet(args)
+    # train_dataset1 = CPDataset(args)
+    # train_dataset2 = DressCodeDataSet(args)
+    # weights = [3.0] * len(train_dataset0) + [1.0] * len(train_dataset1) + [1.0] * len(train_dataset2)
+    # train_dataset = ConcatDataset([train_dataset0, train_dataset1, train_dataset2])
+    # sampler = WeightedRandomSampler(weights, num_samples=len(train_dataset), replacement=True)
 
     def collate_fn(examples):
         image = torch.stack([example["image"] for example in examples])
@@ -263,8 +272,8 @@ def main():
         agnostic = torch.stack([example["agnostic"] for example in examples])
         # parse_other = torch.stack([example["parse_other"] for example in examples])
         pose = torch.stack([example["pose"] for example in examples])
-        dino_fea = torch.stack([example["dino_fea"] for example in examples])
         high_frequency_map = torch.stack([example["high_frequency_map"]["paired"] for example in examples])
+        dino_c = torch.stack([example["dino_c"]["paired"] for example in examples])
         # color_map = torch.stack([example["color_map"]["paired"] for example in examples])
         return {
             "image":image,
@@ -274,7 +283,7 @@ def main():
             "pose":pose,
             # "densepose":densepose,
             # "parse_agnostic":parse_agnostic,
-            "dino_fea":dino_fea,
+            "dino_c":dino_c,
             "high_frequency_map":high_frequency_map,
             # "color_map":color_map,
             # 'parse_other':parse_other
@@ -283,11 +292,11 @@ def main():
     # DataLoaders creation:
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset,
-        # shuffle=True,
+        shuffle=True,
         collate_fn=collate_fn,
         batch_size=args.train_batch_size,
         num_workers=args.dataloader_num_workers,
-        sampler=sampler,
+        # sampler=sampler,
     )
 
     # Scheduler and math around the number of training steps.
@@ -323,6 +332,7 @@ def main():
     # Move text_encode and vae to gpu and cast to weight_dtype
     text_encoder.to(accelerator.device, dtype=weight_dtype)
     vae.to(accelerator.device, dtype=weight_dtype)
+    dino_encoder.to(accelerator.device, dtype=weight_dtype)
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
@@ -369,28 +379,26 @@ def main():
             accelerator.print(f"Resuming from checkpoint {path}")
             accelerator.load_state(os.path.join(args.output_dir, path))
             global_step = int(path.split("-")[1])
-            resume_step = global_step
-            # resume_global_step = global_step * args.gradient_accumulation_steps
-            # first_epoch = global_step // num_update_steps_per_epoch
-            # resume_step = resume_global_step % (num_update_steps_per_epoch * args.gradient_accumulation_steps)
+
+            resume_global_step = global_step * args.gradient_accumulation_steps
+            first_epoch = global_step // num_update_steps_per_epoch
+            resume_step = resume_global_step % (num_update_steps_per_epoch * args.gradient_accumulation_steps)
 
     # Only show the progress bar once on each machine.
     progress_bar = tqdm(range(global_step, args.max_train_steps), disable=not accelerator.is_local_main_process)
     progress_bar.set_description("Steps")
 
-    step =0
-    print(resume_step)
-    while args.resume_from_checkpoint and step < resume_step:
-        if step % args.gradient_accumulation_steps == 0:
-            progress_bar.update(1)
-            step +=1
-
     for epoch in range(first_epoch, args.num_train_epochs):
         unet.train()
         # tocg.train()
         train_loss = 0.0
-        for step_, batch in enumerate(train_dataloader):
-            step +=1
+        for step, batch in enumerate(train_dataloader):
+            # Skip steps until we reach the resumed step
+            if args.resume_from_checkpoint and epoch == first_epoch and step < resume_step:
+                if step % args.gradient_accumulation_steps == 0:
+                    progress_bar.update(1)
+                continue
+            
             # target 
             image = batch["image"]
             
@@ -398,10 +406,10 @@ def main():
             cloth_agnostic = batch["agnostic"]
             # cloth_agnostic = batch["parse_other"]
             pose = batch["pose"]
-            high_frequency_map = batch['high_frequency_map']
+            high_frequency_map = batch['high_frequency_map'].to(weight_dtype)
             # color_map = batch["color_map"]
             # dino_fea
-            dino_fea = batch['dino_fea']
+            dino_c = batch['dino_c'].to(weight_dtype)
 
             with accelerator.accumulate(unet):
                 # We want to learn the denoising process w.r.t the edited images which
@@ -421,6 +429,23 @@ def main():
                 # (this is the forward diffusion process)
                 noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
 
+                # # Get the pose embedding for conditioning.
+                # if random.random() < 0.9:
+                #     dino_c = dino_encoder(dino_c)
+                #     dino_edge = dino_encoder(high_frequency_map)
+                #     dino_fea = torch.cat([dino_c, dino_edge], dim=-1) # b,257,1536*2
+                #     encoder_hidden_states = dino_fea
+                # else:
+                #     encoder_hidden_states = torch.zeros(size=(bsz,257,1024*2)).to(accelerator.device,dtype=weight_dtype)
+
+                # Get the additional image embedding for conditioning.
+                # Instead of getting a diagonal Gaussian here, we simply take the mode.
+                # high_frequency_map = vae.encode(high_frequency_map.to(weight_dtype)).latent_dist.mode()
+
+                # agnostic encode
+                masked_image_embeds = vae.encode(cloth_agnostic.to(weight_dtype)).latent_dist.mode()
+                pose_embeds = F.interpolate(pose.to(weight_dtype), scale_factor=(0.125,0.125))
+
                 args.conditioning_dropout_prob = 0.05
                 if args.conditioning_dropout_prob is not None:
                     random_p = torch.rand(bsz, device=latents.device, generator=generator)
@@ -428,23 +453,24 @@ def main():
                     prompt_mask = random_p < 2 * args.conditioning_dropout_prob
                     prompt_mask = prompt_mask.reshape(bsz, 1, 1)
                     # Final text conditioning.
-                    null_conditioning = torch.zeros(size=(bsz,321,1024)).to(accelerator.device,dtype=weight_dtype)
+                    null_conditioning = torch.zeros(size=(bsz,3943,1024*2)).to(accelerator.device,dtype=weight_dtype)
+                    dino_c = dino_encoder(dino_c)
+                    dino_edge = dino_encoder(high_frequency_map)
+                    dino_fea = torch.cat([dino_c, dino_edge], dim=-1) # b,257,1536*2
                     encoder_hidden_states = torch.where(prompt_mask, null_conditioning, dino_fea)
 
-                # # Get the pose embedding for conditioning.
-                # encoder_hidden_states = dino_fea
-
-                # Get the additional image embedding for conditioning.
-                # Instead of getting a diagonal Gaussian here, we simply take the mode.
-                high_frequency_map = vae.encode(high_frequency_map.to(weight_dtype)).latent_dist.mode()
-                # color_map = vae.encode(color_map.to(weight_dtype)).latent_dist.mode()
-
-                # agnostic encode
-                masked_image_embeds = vae.encode(cloth_agnostic.to(weight_dtype)).latent_dist.mode()
-                pose_embeds = F.interpolate(pose.to(weight_dtype), scale_factor=(0.125,0.125))
+                    # # Sample masks for the original images.
+                    # image_mask_dtype = masked_image_embeds.dtype
+                    # image_mask = 1 - (
+                    #     (random_p >= args.conditioning_dropout_prob).to(image_mask_dtype)
+                    #     * (random_p < 3 * args.conditioning_dropout_prob).to(image_mask_dtype)
+                    # )
+                    # image_mask = image_mask.reshape(bsz, 1, 1, 1)
+                    # # Final image conditioning.
+                    # masked_image_embeds = image_mask * masked_image_embeds
 
                 # Concatenate the `original_image_embeds` with the `noisy_latents`.
-                condition_latent = torch.cat([high_frequency_map, masked_image_embeds, pose_embeds],dim=1)
+                condition_latent = torch.cat([masked_image_embeds, pose_embeds],dim=1)
 
                 # Get the target for loss depending on the prediction type
                 if noise_scheduler.config.prediction_type == "epsilon":
@@ -464,6 +490,14 @@ def main():
 
                 # Backpropagate
                 accelerator.backward(loss)
+                # for name, p in unet.named_parameters():
+                #     if p.grad is None:
+                #         # print('000', name)
+                #         pass
+                #     else:
+                #         #if 'temp' in name:
+                #         print(name, torch.max(p.grad))
+
                 if accelerator.sync_gradients:
                     accelerator.clip_grad_norm_(train_params, args.max_grad_norm)
                 optimizer.step()

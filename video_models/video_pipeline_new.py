@@ -56,8 +56,7 @@ class VideoPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraLoaderMi
         self,
         masked_image: Union[torch.FloatTensor, PIL.Image.Image] = None,
         num_inference_steps: int = 100,
-        image_guidance_scale: float = 7.5,
-        masked_image_guidance_scale: float = 1.5,
+        guidance_scale = 1.0,
         num_images_per_prompt: Optional[int] = 1,
         eta: float = 0.0,
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
@@ -70,7 +69,6 @@ class VideoPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraLoaderMi
         cloth_agnostic: Optional[torch.FloatTensor] = None,
         gt: Optional[torch.FloatTensor] = None,
         mask: Optional[torch.FloatTensor] = None,
-        high_frequency_map: Optional[torch.FloatTensor] = None,
         dino_fea: Optional[torch.FloatTensor] = None,
         video_length: Optional[int] = 1,
         is_long = False,
@@ -94,8 +92,7 @@ class VideoPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraLoaderMi
         # here `guidance_scale` is defined analog to the guidance weight `w` of equation (2)
         # of the Imagen paper: https://arxiv.org/pdf/2205.11487.pdf . `guidance_scale = 1`
         # corresponds to doing no classifier free guidance.
-        do_classifier_free_guidance = True
-        guidance_scale = 2.0
+        do_classifier_free_guidance = guidance_scale > 1.0
         # check if scheduler is in sigmas space
         scheduler_is_in_sigma_space = hasattr(self.scheduler, "sigmas")
 
@@ -112,16 +109,14 @@ class VideoPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraLoaderMi
         # 5. Prepare Image latents
         # masked_image = rearrange(masked_image, "b c f h w -> (b f) c h w")
         # high_frequency_map = rearrange(high_frequency_map, "b c f h w -> (b f) c h w")
-        masked_image_latents, high_frequency_map_latents= self.prepare_image_latents(
+        masked_image_latents = self.prepare_image_latents(
             masked_image,
-            high_frequency_map,
             prompt_embeds.dtype,
             device,
             generator,
         )
         masked_image_latents = rearrange(masked_image_latents, "(b f) c h w -> b c f h w", f=video_length)
-        high_frequency_map_latents = rearrange(high_frequency_map_latents, "(b f) c h w -> b c f h w", f=video_length)
-        
+
         # pose = rearrange(pose, "b c f h w -> (b f) c h w")
         pose_embeds = F.interpolate(pose, scale_factor=(0.125,0.125))
         pose_embeds = pose_embeds.to(device=device, dtype=prompt_embeds.dtype)
@@ -143,6 +138,7 @@ class VideoPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraLoaderMi
 
         # do_classifier_free_guidance
         if do_classifier_free_guidance:
+            print('1111111')
             negative_prompt_embeds = torch.zeros_like(prompt_embeds)
             prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
 
@@ -162,14 +158,13 @@ class VideoPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraLoaderMi
                     value.zero_()
                     for t_start, t_end in views:
                         latents_view = latents[:,:,t_start:t_end]
-                        high_frequency_map_latents_view = high_frequency_map_latents[:,:,t_start:t_end]
                         masked_image_latents_view = masked_image_latents[:,:,t_start:t_end]
                         pose_embeds_input_view = pose_embeds[:,:,t_start:t_end]
                         prompt_embeds_view = prompt_embeds[t_start*batch_size:t_end*batch_size]
                         # print('22',latents_view.shape,high_frequency_map_latents_view.shape,masked_image_latents_view.shape,pose_embeds_input_view.shape,prompt_embeds_view.shape)
                         
                         scaled_latent_model_input = self.scheduler.scale_model_input(latents_view, t)
-                        condition_latent_input = torch.cat([high_frequency_map_latents_view, masked_image_latents_view, pose_embeds_input_view],dim=1)
+                        condition_latent_input = torch.cat([masked_image_latents_view, pose_embeds_input_view],dim=1)
                         # predict the noise residual
                         noise_pred = self.unet(scaled_latent_model_input, condition_latent_input, t, encoder_hidden_states=prompt_embeds_view).sample
 
@@ -192,11 +187,10 @@ class VideoPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraLoaderMi
                     latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
                     pose_embeds_input = torch.cat([pose_embeds] * 2) if do_classifier_free_guidance else pose_embeds
                     masked_image_latents_input = torch.cat([masked_image_latents] * 2) if do_classifier_free_guidance else masked_image_latents
-                    high_frequency_map_latents_input = torch.cat([high_frequency_map_latents] * 2) if do_classifier_free_guidance else high_frequency_map_latents
 
                     # concat latents, image_latents in the channel dimension
                     scaled_latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
-                    condition_latent_input = torch.cat([high_frequency_map_latents_input, masked_image_latents_input, pose_embeds_input],dim=1)
+                    condition_latent_input = torch.cat([masked_image_latents_input, pose_embeds_input],dim=1)
 
                     # predict the noise residual
                     noise_pred = self.unet(scaled_latent_model_input, condition_latent_input, t, encoder_hidden_states=prompt_embeds).sample
@@ -243,25 +237,19 @@ class VideoPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraLoaderMi
 
 
     def prepare_image_latents(
-        self, masked_image, high_frequency_map, dtype, device, generator=None
+        self, masked_image, dtype, device, generator=None
     ):
-
         masked_image = masked_image.to(device=device, dtype=dtype)
-        high_frequency_map = high_frequency_map.to(device=device,dtype=dtype)
 
         if isinstance(generator, list):
             masked_image_latents = [self.vae.encode(masked_image[i : i + 1]).latent_dist.mode() for i in range(batch_size)]
             masked_image_latents = torch.cat(masked_image_latents, dim=0)
-            high_frequency_map_latents = [self.vae.encode(high_frequency_map[i : i + 1]).latent_dist.mode() for i in range(batch_size)]
-            high_frequency_map_latents = torch.cat(high_frequency_map_latents, dim=0)
         else:
             masked_image_latents = self.vae.encode(masked_image).latent_dist.mean
-            high_frequency_map_latents = self.vae.encode(high_frequency_map).latent_dist.mean
 
         masked_image_latents = torch.cat([masked_image_latents], dim=0)
-        high_frequency_map_latents = torch.cat([high_frequency_map_latents], dim=0)
 
-        return masked_image_latents, high_frequency_map_latents
+        return masked_image_latents
 
     def prepare_latents(self, batch_size, num_channels_latents, video_length, height, width, dtype, device, generator, latents=None, same_frame_noise=True):
 

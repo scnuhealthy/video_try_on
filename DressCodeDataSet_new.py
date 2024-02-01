@@ -52,6 +52,11 @@ class DressCodeDataSet(data.Dataset):
                 transforms.Normalize([0.5], [0.5]),
                 # transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
+        self.dino_transform = transforms.Compose([
+            transforms.Resize((1022,756), interpolation=transforms.InterpolationMode.BICUBIC),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+        ])
         # load data list
         im_names = []
         c_names = []
@@ -151,7 +156,7 @@ class DressCodeDataSet(data.Dataset):
         c_name = {}
         c = {}
         high_frequency_map = {}
-        hog_map = {}
+        dino_c = {}
         for key in ['paired']:
             if self.random_pair:
                 c_name[key] = self.c_names[key][random.randint(0,len(self.im_names)-1)]
@@ -161,25 +166,14 @@ class DressCodeDataSet(data.Dataset):
 
             # get high frequency map
             high_frequency_map[key] = get_high_frequency_map(osp.join(self.data_path, 'images', c_name[key]))
-            high_frequency_map[key] = transforms.Resize(self.fine_width, interpolation=2)(high_frequency_map[key])
-            high_frequency_map[key] = self.transform(high_frequency_map[key])  # [-1,1]
+            # high_frequency_map[key] = transforms.Resize(self.fine_width, interpolation=2)(high_frequency_map[key])
+            # high_frequency_map[key] = self.transform(high_frequency_map[key])  # [-1,1]
+            high_frequency_map[key] = self.dino_transform(high_frequency_map[key])  # [-1,1]
 
-            # get hog feature
-            _,hog_map[key] = ft.hog(np.array(c[key]), orientations=9, pixels_per_cell=[64,64], cells_per_block=[2,2],
-                                  block_norm='L1', feature_vector=True, channel_axis=-1, visualize=True)
-            hog_map[key] = Image.fromarray(hog_map[key].astype(np.uint8))
-            hog_map[key] = transforms.Resize(self.fine_width, interpolation=2)(hog_map[key])
-            hog_map[key] = self.transform(hog_map[key])  # [-1,1]
+            dino_c[key] = self.dino_transform(c[key])
 
             c[key] = transforms.Resize(self.fine_width, interpolation=2)(c[key])
             c[key] = self.transform(c[key])  # [-1,1]
-
-        # # load background
-        # foreground_name = im_name.replace('images', 'foreground').replace('.jpg', '_mask.png')
-        # foreground = Image.open(osp.join(self.data_path, foreground_name))
-        # foreground = transforms.Resize(self.fine_width, interpolation=2)(foreground)
-        # foreground = np.array(foreground)
-        # foreground_mask = torch.tensor(foreground / 255)
 
         # person image
         im_pil_big = Image.open(osp.join(self.data_path, im_name))
@@ -278,10 +272,6 @@ class DressCodeDataSet(data.Dataset):
         im_other = im * parse_other
         parse_upper_mask = (1 - parse_other).unsqueeze(0)
 
-        # load_dino_fea
-        fea_name = osp.join('dino_fea', c_name[key].replace('.jpg','.pt'))
-        dino_fea = torch.load(osp.join(self.data_path, fea_name),map_location='cpu')
-
         result = {
             'c_name':   c_name,     # for visualization
             'im_name':  im_name,    # for visualization or ground truth
@@ -304,8 +294,7 @@ class DressCodeDataSet(data.Dataset):
             'original_pixel_values':im_c, 
             'edited_pixel_values':im,
             'high_frequency_map':high_frequency_map,
-            'hog_map':hog_map,
-            'dino_fea':dino_fea
+            'dino_c':dino_c
             }
 
         return result
@@ -382,7 +371,6 @@ if __name__ == '__main__':
     #print(len(dataset1),len(dataset2),len(dataset))
     p = dataset[5]
     print(p['c_name'], p['im_name'])
-    print(p['hog_map']['paired'].shape)
     agnostic = p['agnostic'].permute(1,2,0).numpy()
     agnostic = agnostic / 2 + 0.5
     agnostic *=255
