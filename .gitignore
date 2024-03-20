@@ -2,3 +2,7 @@
 *.ipynb_checkpoints*
 *.jpg
 *.pth
+*.pyc*
+*.jpg
+*.png
+*.gif
