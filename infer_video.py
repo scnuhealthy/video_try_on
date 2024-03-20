@@ -71,6 +71,7 @@ def collate_fn(examples):
     high_frequency_map = torch.stack([example["high_frequency_map"][opt.datasetting] for example in examples])
     parse_other = torch.stack([example["parse_other"] for example in examples])
     parse_upper_mask = torch.stack([example["parse_upper_mask"] for example in examples])
+    parse = torch.stack([example["parse"] for example in examples])
     return {
         "parse_cloth":parse_cloth,
         "pcm": pcm,
@@ -83,10 +84,11 @@ def collate_fn(examples):
         "dino_fea":dino_fea,
         "high_frequency_map":high_frequency_map,
         "parse_other":parse_other,
-        "parse_upper_mask":parse_upper_mask
+        "parse_upper_mask":parse_upper_mask,
+        "parse":parse
     }
 
-batch_size = 36
+batch_size = 16
 iters = 1
 is_long = False
 test_dataloader = CPDataLoader(batch_size=batch_size,workers=8,shuffle=False,dataset=dataset,collate_fn=collate_fn)
@@ -124,12 +126,12 @@ out_dir = config.out_dir
 if not os.path.exists(out_dir):
     os.makedirs(out_dir)
 
-num_inference_steps = 50
+num_inference_steps = 30
 image_guidance_scale = 1
 masked_image_guidance_scale = 1
 weight_dtype = torch.float16
 
-image_idx = 0
+image_idx = 0 
 outputs = []
 # batch = test_dataloader.next_batch()
 for i in range(iters):
@@ -146,6 +148,9 @@ for i in range(iters):
 
     # dino_fea
     dino_fea = batch['dino_fea'].to(device='cuda',dtype=weight_dtype)
+
+    # vis
+    parse = batch['parse']
 
     # vae decoder
     pcm = batch['pcm'].to(device='cuda', dtype=weight_dtype)
@@ -198,7 +203,7 @@ for i in range(iters):
         outputs.append(np.array(edited_image).astype(np.uint8))
         edited_image = torch.tensor(np.array(edited_image)).permute(2,0,1) / 255.0
         grid = make_image_grid([(c_paired[idx].cpu() / 2 + 0.5),(high_frequency_map[idx].cpu().detach() / 2 + 0.5), (parse_other[idx].cpu().detach() / 2 + 0.5),
-        (pose[idx].cpu().detach() / 2 + 0.5),(agnostic[idx].cpu().detach() / 2 + 0.5),
+        (pose[idx].cpu().detach() / 2 + 0.5),(agnostic[idx].cpu().detach() / 2 + 0.5), visualize_segmap(parse[idx].unsqueeze(0).cpu()),
         (target_image[idx].cpu() /2 +0.5), edited_image.cpu(),
         ], nrow=4)
         # save_image(grid, os.path.join(out_dir, ('%d.jpg'%image_idx).zfill(6)))

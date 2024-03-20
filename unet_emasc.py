@@ -129,7 +129,7 @@ class UNet_EMASC(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin):
             in_channels, block_out_channels[0], kernel_size=conv_in_kernel, padding=conv_in_padding
         )
         self.conv_in_cloth = nn.Conv2d(
-            7 , block_out_channels[0], kernel_size=conv_in_kernel, padding=conv_in_padding
+            11 , block_out_channels[0], kernel_size=conv_in_kernel, padding=conv_in_padding
         ) 
 
         # time

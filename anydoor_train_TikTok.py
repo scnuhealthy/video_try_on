@@ -131,8 +131,11 @@ def main():
     # unet = UNet_EMASC.from_pretrained(
     #    args.pretrained_model_name_or_path, subfolder="unet", revision=args.non_ema_revision,low_cpu_mem_usage=False
     # )
+    # unet = UNet_EMASC.from_pretrained(
+    #    '/data1/hzj/anydoor/trained_models/model_TikTok_rebuttal_ft_from_TikTok/checkpoint-55000', subfolder="unet", revision=args.non_ema_revision, # low_cpu_mem_usage=False
+    # )
     unet = UNet_EMASC.from_pretrained(
-       'trained_models/model_TikTok_512_fixbug_1109_lip/checkpoint-150000', subfolder="unet", revision=args.non_ema_revision, # low_cpu_mem_usage=False
+       'model_TikTok_eccv_ft_dino560/checkpoint-10000', subfolder="unet", revision=args.non_ema_revision, # low_cpu_mem_usage=False
     )
     # unet = UNet_EMASC(cross_attention_dim=768, block_out_channels=(320,320,640,640),norm_num_groups=32,sample_size=64, in_channels=4, out_channels=4)
 
@@ -245,14 +248,16 @@ def main():
         eps=args.adam_epsilon,
     )  
     
-    train_dataset0 = TikTokDataSet(args)
-    train_dataset1 = CPDataset(args)
-    train_dataset2 = DressCodeDataSet(args)
-    weights = [3.0] * len(train_dataset0) + [1.0] * len(train_dataset1) + [1.0] * len(train_dataset2)
-    train_dataset = ConcatDataset([train_dataset0, train_dataset1, train_dataset2])
-    sampler = WeightedRandomSampler(weights, num_samples=len(train_dataset), replacement=True)
+    # train_dataset0 = TikTokDataSet(args)
+    # # train_dataset1 = CPDataset(args)
+    # train_dataset2 = DressCodeDataSet(args)
+    # weights = [1.0] * len(train_dataset0) + [2.0] * len(train_dataset2)
+    # train_dataset = ConcatDataset([train_dataset0, train_dataset2])
+    # sampler = WeightedRandomSampler(weights, num_samples=len(train_dataset), replacement=True)
 
-    print('Length DataSet', len(train_dataset0), len(train_dataset1), len(train_dataset2))
+    # print('Length DataSet', len(train_dataset0), len(train_dataset2))
+
+    train_dataset = TikTokDataSet(args)
 
     def collate_fn(examples):
         image = torch.stack([example["image"] for example in examples])
@@ -379,11 +384,12 @@ def main():
     progress_bar.set_description("Steps")
 
     step =0
-    print(resume_step)
+    # print(resume_step)
     while args.resume_from_checkpoint and step < resume_step:
         if step % args.gradient_accumulation_steps == 0:
             progress_bar.update(1)
-            step +=1
+            global_step +=1
+        step +=1
 
     for epoch in range(first_epoch, args.num_train_epochs):
         unet.train()
@@ -402,7 +408,6 @@ def main():
             # color_map = batch["color_map"]
             # dino_fea
             dino_fea = batch['dino_fea']
-
             with accelerator.accumulate(unet):
                 # We want to learn the denoising process w.r.t the edited images which
                 # are conditioned on the original image (which was edited) and the edit instruction.
@@ -428,7 +433,7 @@ def main():
                     prompt_mask = random_p < 2 * args.conditioning_dropout_prob
                     prompt_mask = prompt_mask.reshape(bsz, 1, 1)
                     # Final text conditioning.
-                    null_conditioning = torch.zeros(size=(bsz,321,1024)).to(accelerator.device,dtype=weight_dtype)
+                    null_conditioning = torch.zeros(size=(bsz,dino_fea.shape[1],1024)).to(accelerator.device,dtype=weight_dtype)
                     encoder_hidden_states = torch.where(prompt_mask, null_conditioning, dino_fea)
 
                 # # Get the pose embedding for conditioning.

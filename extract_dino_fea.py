@@ -12,12 +12,13 @@ class ClothDataSet(data.Dataset):
         files = os.listdir(root)
         self.files = []
         for onefile in files:
-            #if onefile[-5] == '1':
-            self.files.append(onefile)
+            if onefile[-5] == '1':
+                self.files.append(onefile)
         print(len(self.files))
         self.root = root
         self.transform = T.Compose([
-            T.Resize((280,224), interpolation=T.InterpolationMode.BICUBIC),
+            # T.Resize((280,224), interpolation=T.InterpolationMode.BICUBIC),
+            T.Resize((560,448), interpolation=T.InterpolationMode.BICUBIC),
             T.ToTensor(),
             T.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
         ])
@@ -77,15 +78,20 @@ if  __name__ == '__main__':
 
     # d = ClothDataSet('/data1/hzj/zalando-hd-resized/test/cloth/')
     # feature_save_root = '/data1/hzj/zalando-hd-resized/test/dino_fea/'
-    # d = ClothDataSet('/data1/hzj/DressCode/upper_body/images')
-    # feature_save_root = '/data1/hzj/DressCode/upper_body/dino_fea'
-    d = ClothDataSet('/data1/hzj/TikTok_dataset2/cloth/')
-    feature_save_root = '/data1/hzj/TikTok_dataset2/dino_fea/'
+    d = ClothDataSet('/data3/hzj/DressCode/upper_body/images')
+    feature_save_root = '/data3/hzj/DressCode/upper_body/dino_fea_560'
+    # d = ClothDataSet('/data3/hzj/TikTok_dataset2/cloth/')
+    # feature_save_root = '/data3/hzj/TikTok_dataset2/dino_fea_560/'
     if not os.path.exists(feature_save_root):
         os.mkdir(feature_save_root)
     dataloader = CPDataLoader(4,4,False,d)
 
     for i, batch in enumerate(dataloader.data_loader):
+        print(i)
+        if i < 1873:
+            continue
+        if i > 2873:
+            break
         names = batch[0]
         imgs_tenosr = batch[1]
         with torch.no_grad():

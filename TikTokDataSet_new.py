@@ -44,7 +44,7 @@ class TikTokDataSet(data.Dataset):
         im_names = []
         c_names = []
         with open(osp.join(opt.dataroot4, self.data_list), 'r') as f:
-            for line in f.readlines()[96:]:
+            for line in f.readlines()[:]:
             # for line in f.readlines():
                 c_name, im_name = line.strip().split()
                 im_names.append(im_name)
@@ -221,13 +221,15 @@ class TikTokDataSet(data.Dataset):
         pose_json_name = osp.join(self.root, pose_json_name)
         pose_name = osp.join(self.root, pose_name)
 
+        # c_name = '/data3/hzj/zalando-hd-resized/test/cloth/01149_00.jpg'
+
         # load_dino_fea
         # fea_name = c_name.replace('.jpg', '.pt').replace('img','dino_fea')
         name = c_name.split('/')[-1].replace('.png', '.pt')
         fea_name = osp.join(self.root, 'dino_fea', name)
         # print(fea_name)
-        # c_name = '/data1/hzj/DressCode/upper_body/images/009328_1.jpg'
-        #fea_name = '/data1/hzj/DressCode/upper_body/dino_fea/009328_1.pt'
+        # c_name = '/data3/hzj/DressCode/upper_body/images/004743_1.jpg'
+        # fea_name = '/data3/hzj/DressCode/upper_body/dino_fea_560/004743_1.pt'
         # c_name = '/root/autodl-tmp/zalando-hd-resized/test/cloth/07421_00.jpg'
         # fea_name = '/root/autodl-tmp/zalando-hd-resized/test/dino_fea/07421_00.pt'
         # dino_fea = torch.load(fea_name, map_location='cpu')

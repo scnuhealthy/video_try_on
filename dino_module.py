@@ -16,7 +16,7 @@ sys.path.append("./dinov2")
 import hubconf
 from omegaconf import OmegaConf
 # DINOv2_weight_path = '/root/autodl-tmp/AnyDoor/trained_models/dinov2_vitg14_pretrain.pth'
-DINOv2_weight_path = '/root/autodl-tmp/video_try_on/trained_models/dinov2_vitl14_pretrain.pth'
+DINOv2_weight_path = '/data1/hzj/anydoor/trained_models/dinov2_vitl14_pretrain.pth'
 
 class FrozenDinoV2Encoder(AbstractEncoder):
     """

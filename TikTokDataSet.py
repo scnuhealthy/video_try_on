@@ -39,8 +39,8 @@ class TikTokDataSet(data.Dataset):
         im_names = []
         c_names = []
         with open(osp.join(opt.dataroot4, self.data_list), 'r') as f:
-            # for line in f.readlines()[96:]:
-            for line in f.readlines():
+            for line in f.readlines()[:]:
+            # for line in f.readlines():
                 c_name, im_name = line.strip().split()
                 im_names.append(im_name)
                 c_names.append(c_name)
@@ -144,8 +144,8 @@ class TikTokDataSet(data.Dataset):
         pose_data[9] = point + (pose_data[9] - point) / length_b * length_a
         pose_data[12] = point + (pose_data[12] - point) / length_b * length_a
 
-        # r = int(length_a / 16) + 1 
-        r = int(length_a / 16)
+        r = int(length_a / 16) + 1 
+        # r = int(length_a / 20) - 3
 
         # mask torso
         for i in [9, 12]:
@@ -219,12 +219,17 @@ class TikTokDataSet(data.Dataset):
         # load_dino_fea
         # fea_name = c_name.replace('.jpg', '.pt').replace('img','dino_fea')
         name = c_name.split('/')[-1].replace('.png', '.pt')
+        #name = '00043.pt'
         fea_name = osp.join(self.root, 'dino_fea', name)
         # print(fea_name)
-        # c_name = '/data1/hzj/DressCode/upper_body/images/009328_1.jpg'
-        #fea_name = '/data1/hzj/DressCode/upper_body/dino_fea/009328_1.pt'
-        # c_name = '/root/autodl-tmp/zalando-hd-resized/test/cloth/07421_00.jpg'
-        # fea_name = '/root/autodl-tmp/zalando-hd-resized/test/dino_fea/07421_00.pt'
+        # c_name = '/data3/hzj/DressCode/upper_body/images/048871_1.jpg'
+        # fea_name = '/data3/hzj/DressCode/upper_body/dino_fea/048871_1.pt'
+        # c_name = '/data3/hzj/DressCode/upper_body/images/000098_1.jpg'
+        # fea_name = '/data3/hzj/DressCode/upper_body/dino_fea_560/000098_1.pt'
+        # c_name = '/data3/hzj/zalando-hd-resized/test/cloth/07421_00.jpg'
+        # fea_name = '/data3/hzj/zalando-hd-resized/test/dino_fea/07421_00.pt'
+        # c_name = '/data3/hzj/zalando-hd-resized/test/cloth/08735_00.jpg'
+        # fea_name = '/data3/hzj/zalando-hd-resized/test/dino_fea/08735_00.pt'
         dino_fea = torch.load(fea_name, map_location='cpu')
 
         # cloth
@@ -465,9 +470,9 @@ if __name__ == '__main__':
 
     config = Config.fromfile('config.py')
     opt = copy.deepcopy(config)
-    opt.datamode = config.train_datamode
-    opt.data_list = config.train_data_list
-    opt.datasetting = config.train_datasetting
+    opt.datamode = config.infer_datamode
+    opt.data_list = config.infer_data_list
+    opt.datasetting = config.infer_datasetting
 
 
     def ndim_tensor2im(image_tensor, imtype=np.uint8, batch=0):
@@ -502,8 +507,8 @@ if __name__ == '__main__':
     print(len(dataset))
     # for i in range(len(dataset)):
     #     p=dataset[i]
-    sp = random.randint(0,len(dataset)-1)
-    #sp = 6958
+    #sp = random.randint(0,len(dataset)-1)
+    sp = 0
     #print('index',sp)
     p = dataset[sp]
 

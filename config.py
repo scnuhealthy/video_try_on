@@ -1,8 +1,8 @@
 # data
-dataroot = '/root/autodl-tmp/zalando-hd-resized'
-dataroot2 = '/root/autodl-tmp/DressCode/upper_body/'
+dataroot = '/data3/hzj/zalando-hd-resized'
+dataroot2 = '/data3/hzj/DressCode/upper_body/'
 dataroot3 = '/root/autodl-tmp/192_256/'
-dataroot4 = '/root/autodl-tmp/TikTok_dataset2/'
+dataroot4 = '/data3/hzj/TikTok_dataset2/'
 vtt_data_list = '/data1/hzj/192_256/custom_test_pairs.txt'
 fine_height = 512
 fine_width = 384
@@ -12,7 +12,7 @@ with_agnostic = True
 semantic_nc = 13
 
 # infer 
-model_path = '/root/autodl-tmp/animate/pretrained_models/stable-diffusion-v1-5'  # basic stable diffusion
+model_path = '/data1/hzj/magic-animate/pretrained_models/stable-diffusion-v1-5'  # basic stable diffusion
 
 # VITON 
 # # unet_path = 'model_VITON_512_DINO_large_large2/checkpoint-45000'
@@ -28,27 +28,34 @@ model_path = '/root/autodl-tmp/animate/pretrained_models/stable-diffusion-v1-5' 
 
 # DressCode
 # unet_path = '/data0/hzj/anydoor/trained_models/model_VITON_512_fixbug/checkpoint_120000'
-unet_path = 'model_VITON_512_DINO_large_large2/checkpoint-45000'
-vae_path = 'trained_models/HR_VITON_vae'
-test_dataset = 'DressCode'
-infer_datamode = 'test'
-infer_data_list = 'test_pairs_unpaired.txt'
-infer_datasetting = 'unpaired'
-out_dir = 'gen_test_DressCode_new_scale2.0_0129'
-
-# # TikTok
-# # unet_path = 'trained_models/model_TikTok_512_fixbug_1109_lip/checkpoint-150000'  # tiktok model
-# unet_path = 'model_TikTok_rebuttal_ft_from_TikTok/checkpoint-55000'
-# # unet_path = 'model_VITON_512_DINO_large_large_TikTok2/checkpoint-45000'
-# # vae_path = 'trained_models/HR_VITON_vae'      # VITON vae
-# vae_path = '/root/autodl-tmp/animate/pretrained_models/sd-vae-ft-mse/'
-# # out_dir = 'gen_test_TikTOk_rebuttal_large_3.0'
-# # out_dir = 'gen_test_TikTok_rebuttal_scale_102_321_video2'
-# out_dir = 'gen_test'
-# test_dataset = 'TikTok'
+# unet_path = 'model_VITON_512_DINO_large_large2/checkpoint-45000'
+# vae_path = 'trained_models/HR_VITON_vae'
+# test_dataset = 'DressCode'
 # infer_datamode = 'test'
-# infer_data_list = 'train_unpairs_sp_102_321.txt'
+# infer_data_list = 'test_pairs_unpaired.txt'
 # infer_datasetting = 'unpaired'
+# out_dir = 'gen_test_DressCode_new_scale2.0_0129'
+
+# TikTok
+# unet_path = '../anydoor/trained_models/model_TikTok_512_fixbug_1109_lip/checkpoint-150000'  # tiktok model
+# unet_path = '/data1/hzj/anydoor/trained_models/model_TikTok_rebuttal_ft_from_TikTok/checkpoint-55000'
+# unet_path = '/data1/hzj/anydoor/trained_models/model_VITON_512_DINO_large_large_TikTok2/checkpoint-45000/'
+# unet_path = 'model_TikTok_eccv_ft/checkpoint-30000'
+unet_path = 'model_TikTok_eccv_ft/checkpoint-30000'
+# vae_path = '../anydoor/trained_models/HR_VITON_vae'      # VITON vae
+vae_path = '/data1/hzj/magic-animate/pretrained_models/sd-vae-ft-mse/'
+# out_dir = 'gen_test_TikTOk_rebuttal_large_3.0'
+# out_dir = 'gen_test_TikTok_rebuttal_scale_102_321_video2'
+# out_dir = 'gen_test_134_138'
+out_dir = 'gen_test_128_102_2'
+test_dataset = 'TikTok'
+infer_datamode = 'test'
+# infer_data_list = 'train_unpairs_sp_159_167.txt'
+# infer_data_list = 'train_unpairs_sp_134_138.txt'
+# infer_data_list = 'train_unpairs_sp_179_167.txt'
+# infer_data_list = 'train_unpairs_sp_202_267.txt'
+infer_data_list = 'train_unpairs_sp_128_102.txt'
+infer_datasetting = 'unpaired'
 
 # # VTT
 # unet_path = 'trained_models/model_VTT_192_256_1030_fixbug/checkpoint-120000'  # tiktok model
@@ -79,9 +86,9 @@ train_data_list = 'train_pairs.txt'
 train_datasetting = 'paired'
 
 # train
-pretrained_model_name_or_path = '/root/autodl-tmp/animate/pretrained_models/stable-diffusion-v1-5'
+pretrained_model_name_or_path = '/data1/hzj/magic-animate/pretrained_models/stable-diffusion-v1-5'
 # output_dir = 'model_VITON_512_DINO_large_large_TikTok2'  # one-stage train
-output_dir = 'model_VITON_512_DINO_large_large2'  # one-stage train
+output_dir = 'model_TikTok_eccv_ft_dino560_dresscode_06'  # one-stage train
 # output_dir = 'model_TikTok_rebuttal_ft_from_TikTok'
 # output_dir = 'model_VTT_vae_fixhand'
 revision = None
@@ -91,7 +98,7 @@ validation_epoches = 1
 max_train_samples = None
 cache_dir = None
 seed = 42
-resolution = 256
+resolution = 512
 center_crop = False
 random_flip = True
 train_batch_size = 16
@@ -118,7 +125,7 @@ logging_dir = 'logs'
 mixed_precision = 'fp16'
 report_to = 'tensorboard'
 local_rank = -1
-checkpointing_steps = 15000
+checkpointing_steps = 5000
 checkpoints_total_limit = None
 resume_from_checkpoint = 'latest'
 # resume_from_checkpoint = None
