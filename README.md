@@ -204,3 +204,13 @@ pipeline 应该用pcm而不是paser_upper_mask, pcm归0区域更小
 ## Demo ##
 <img src="figures/case1.gif" width="576" height="304"> <img src="figures/case2.gif" width="576" height="304">
 
+## Citation
+If you find this code helpful for your research, please cite:
+```
+@article{he2024wildvidfit,
+  title={WildVidFit: Video Virtual Try-On in the Wild via Image-Based Controlled Diffusion Models},
+  author={He, Zijian and Chen, Peixin and Wang, Guangrun and Li, Guanbin and Torr, Philip HS and Lin, Liang},
+  journal={arXiv preprint arXiv:2407.10625},
+  year={2024}
+}
+```
