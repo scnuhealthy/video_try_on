@@ -132,18 +132,9 @@ Once the dataset is downloaded, the folder structure should look like this:
 
 ## Trained model ##
 **unet** 
-* agnostic_norm_hair_have_background: VITON, DressCode, Wild Video使用, 但是这个模型在down fuse存在一个bug 
-* agnostic_nonorm_hair_have_background_black nonorm: nonorm, 有背景和头发，但是agnostic的cloth用黑色mask 
-* agnostic_nonorm_hair_have_background_gray nonorm: nonorm, 有背景和头发，但是agnostic的cloth用常规的灰色mask
-* model_VITON_512_fixbug: 上面的模型将这个bug修复后 
-* model_VITON_512_DINO_large_large2: rebuttal 模型，将edge放到cross attention，然后garment size提升到1022，需要用带‘new’的文件
-* model_VTT_192_256_1030_fixbug： VTT 
 * model_VTT_192_256_1030_fixbug_long: VTT 
-* model_TikTok_512_fixbug_1107:   TikTok 
-* model_TikTok_512_fixbug_1109_atr: TikTTok, parse use atr 
-* model_TikTok_512_fixbug_1109_lip:: TikTok, parse use lip 
-* model_TikTok_rebuttal_ft_from_TikTok: 基于1109_lip模型进行ft,增加了classifier free guidance
-* model_VITON_512_DINO_large_large_TikTok2: 基于model_VITON_512_DINO_large_large2在TikTok数据集上ft，需要用带‘new’的文件
+* model_TikTok_512_fixbug_1109_lip:: TikTok 
+* model_VITON_512_DINO_large_large_TikTok2: VITON
 
 **vae**
 * HR_VITON_vae： 通用的用emasc ft后的vae
@@ -195,11 +186,6 @@ anydoor_train时 读自己得模型不需要删除conv
 wild_config.py WildVideoDataset.py 用wild视频直接换衣
 pipeline 应该用pcm而不是paser_upper_mask, pcm归0区域更小
 有一问题没解决：agnostic = agnostic * (1-pcm) + pcm * torch.zeros_like(agnostic) 这里好像会造成data leak，具体原因未知（猜测是灰色mask得数值不一定是0），因为可视化都一致
-
-## Rebuttal update
-* Dataset bug fix, ImageDraw的灰色在归一化的时候不是0，而是一个很小的值0.00392163，以前有data leak
-* 增加了classifier free guidance，在TikTok和VITON数据集上面都有明显提升，使用one_stage_train.py进行训练. 为减少改动，我直接在blende_cloth_pipeline.py里面直接写死了guidance scale
-* 将edge map concat到garment,一起进行cross attention, 并将DINO feature的输入提高到1022，这些需要带new结尾的文件. 推理时需要手动更改unet_emasc(包括video_models/里面的)的channel (11->7)，因为conditional branch不再输入edge map
 
 ## Demo ##
 <img src="figures/case1.gif" width="576" height="304"> <img src="figures/case2.gif" width="576" height="304">
