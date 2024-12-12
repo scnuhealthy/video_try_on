@@ -183,7 +183,9 @@ Fid and Kid for image try-on network. Note that we should resize the GT into the
 
 ## Other Note ##
 anydoor_train时 读自己得模型不需要删除conv
+
 wild_config.py WildVideoDataset.py 用wild视频直接换衣
+
 pipeline 应该用pcm而不是paser_upper_mask, pcm归0区域更小
 有一问题没解决：agnostic = agnostic * (1-pcm) + pcm * torch.zeros_like(agnostic) 这里好像会造成data leak，具体原因未知（猜测是灰色mask得数值不一定是0），因为可视化都一致
 
